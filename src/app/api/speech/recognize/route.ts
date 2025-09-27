@@ -4,34 +4,38 @@ export const runtime = 'edge';
 
 export async function POST(request: Request) {
   try {
-    const contentType = request.headers.get('content-type') || '';
-    if (!contentType.includes('multipart/form-data')) {
-      return NextResponse.json({ error: 'Expected multipart/form-data' }, { status: 400 });
+    const body = await request.json();
+    const audioBase64 = body?.audio;
+    if (!audioBase64) {
+      return NextResponse.json({ error: 'audio (base64) is required' }, { status: 400 });
     }
 
-    // Read the request body as a stream and forward to Google STT if possible
     const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!apiKey) {
       return NextResponse.json({ error: 'Server missing GOOGLE_GEMINI_API_KEY' }, { status: 500 });
     }
 
-    // For edge runtime, we can forward the multipart body directly to Google's endpoint
-    // NOTE: Adjust endpoint and request shape depending on the Google Speech API you use.
-    const googleResp = await fetch('https://speech.googleapis.com/v1p1beta1/speech:recognize', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        // Let fetch set the content-type boundary by forwarding the original content-type
-        'Content-Type': contentType,
+    // Prepare request for Google Speech-to-Text (JSON API expects base64 audio content)
+    const reqBody = {
+      config: {
+        encoding: 'WEBM_OPUS',
+        sampleRateHertz: 48000,
+        languageCode: 'en-US',
       },
-      body: await request.arrayBuffer(),
+      audio: {
+        content: audioBase64,
+      },
+    };
+
+    const url = `https://speech.googleapis.com/v1p1beta1/speech:recognize?key=${apiKey}`;
+    const googleResp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(reqBody),
     });
 
-    const data = await googleResp.text();
-    // Return the raw text response (could be JSON)
-    let parsed;
-    try { parsed = JSON.parse(data); } catch { parsed = { raw: data }; }
-    return NextResponse.json({ ok: true, data: parsed }, { status: googleResp.status });
+    const data = await googleResp.json();
+    return NextResponse.json({ ok: true, data }, { status: googleResp.status });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });

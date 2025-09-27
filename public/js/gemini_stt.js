@@ -7,6 +7,7 @@ const serverResult = document.getElementById('serverResult');
 let mediaRecorder = null;
 let chunks = [];
 let recognition = null;
+let finalTranscripts = [];
 
 recordBtn.addEventListener('click', async () => {
   serverResult.textContent = '';
@@ -29,19 +30,25 @@ recordBtn.addEventListener('click', async () => {
       recognition.interimResults = true;
       recognition.continuous = true;
 
+      // reset stored finals when starting a new recording
+      finalTranscripts = [];
+
       recognition.onresult = (event) => {
         const results = event.results;
         let interim = '';
         for (let i = event.resultIndex; i < results.length; i++) {
-          const r = results[i][0].transcript;
+          const r = results[i][0].transcript.trim();
           if (results[i].isFinal) {
-            transcriptEl.textContent += r + '\n';
+            // only add if different from last to avoid duplicates
+            if (finalTranscripts.length === 0 || finalTranscripts[finalTranscripts.length - 1] !== r) {
+              finalTranscripts.push(r);
+            }
           } else {
             interim += r;
           }
         }
-        // Show interim appended to existing
-        transcriptEl.textContent = transcriptEl.textContent.split('\n').filter(Boolean).join('\n') + (interim ? '\n' + interim : '');
+        // Render final transcripts and current interim
+        transcriptEl.textContent = finalTranscripts.join('\n') + (interim ? '\n' + interim : '');
       };
       recognition.onerror = (e) => console.error('Recognition error', e);
       recognition.start();
@@ -71,13 +78,18 @@ stopBtn.addEventListener('click', async () => {
     // Wait for data to be available
     mediaRecorder.onstop = async () => {
       const blob = new Blob(chunks, { type: 'audio/webm' });
-      // Upload blob to server endpoint for Speech-to-Text
+      // Convert to base64 and send JSON to server endpoint for Speech-to-Text
       try {
         statusEl.textContent = 'Uploading audio to server...';
-        const fd = new FormData();
-        fd.append('file', blob, 'recording.webm');
+        const arrayBuffer = await blob.arrayBuffer();
+        // convert arrayBuffer to base64
+        const base64 = arrayBufferToBase64(arrayBuffer);
 
-        const resp = await fetch('/api/speech/recognize', { method: 'POST', body: fd });
+        const resp = await fetch('/api/speech/recognize', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ audio: base64 }),
+        });
         const json = await resp.json();
         serverResult.textContent = JSON.stringify(json, null, 2);
         statusEl.textContent = 'Idle';
@@ -97,3 +109,15 @@ stopBtn.addEventListener('click', async () => {
     stopBtn.disabled = true;
   }
 });
+
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  const chunk = 0x8000;
+  for (let i = 0; i < len; i += chunk) {
+    const slice = bytes.subarray(i, i + chunk);
+    binary += String.fromCharCode.apply(null, slice);
+  }
+  return btoa(binary);
+}
