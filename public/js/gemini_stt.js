@@ -77,25 +77,65 @@ stopBtn.addEventListener('click', async () => {
     mediaRecorder.stop();
     // Wait for data to be available
     mediaRecorder.onstop = async () => {
-      const blob = new Blob(chunks, { type: 'audio/webm' });
-      // Convert to base64 and send JSON to server endpoint for Speech-to-Text
-      try {
-        statusEl.textContent = 'Uploading audio to server...';
-        const arrayBuffer = await blob.arrayBuffer();
-        // convert arrayBuffer to base64
-        const base64 = arrayBufferToBase64(arrayBuffer);
-
-        const resp = await fetch('/api/speech/recognize', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ audio: base64 }),
-        });
-        const json = await resp.json();
-        serverResult.textContent = JSON.stringify(json, null, 2);
-        statusEl.textContent = 'Idle';
-      } catch (e) {
-        console.error('Upload error', e);
-        statusEl.textContent = 'Upload error';
+      // If the browser produced final transcripts (via SpeechRecognition), prefer sending that text
+      const finalText = finalTranscripts && finalTranscripts.length ? finalTranscripts.join('\n') : '';
+      if (finalText) {
+        try {
+          statusEl.textContent = 'Sending final browser transcript to server...';
+          const resp = await fetch('/api/speech/recognize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ transcript: finalText }),
+          });
+          const json = await resp.json();
+          console.log('server response', json);
+          if (json && json.cleaned) {
+            // show the cleaned transcript as plain text
+            serverResult.textContent = json.cleaned;
+            transcriptEl.textContent = json.cleaned;
+          } else if (json && json.transcript) {
+            serverResult.textContent = json.transcript;
+            transcriptEl.textContent = json.transcript;
+          } else if (json && json.error) {
+            serverResult.textContent = 'Error: ' + (json.error || JSON.stringify(json));
+          } else {
+            serverResult.textContent = '(no transcript returned)';
+          }
+          statusEl.textContent = 'Idle';
+        } catch (e) {
+          console.error('Upload error', e);
+          statusEl.textContent = 'Upload error';
+        }
+      } else {
+        // Fallback: send recorded audio blob to server
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        try {
+          statusEl.textContent = 'Uploading audio to server...';
+          const arrayBuffer = await blob.arrayBuffer();
+          const base64 = arrayBufferToBase64(arrayBuffer);
+          const resp = await fetch('/api/speech/recognize', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ audio: base64 }),
+          });
+          const json = await resp.json();
+          console.log('server response', json);
+          if (json && json.cleaned) {
+            serverResult.textContent = json.cleaned;
+            transcriptEl.textContent = json.cleaned;
+          } else if (json && json.transcript) {
+            serverResult.textContent = json.transcript;
+            transcriptEl.textContent = json.transcript;
+          } else if (json && json.error) {
+            serverResult.textContent = 'Error: ' + (json.error || JSON.stringify(json));
+          } else {
+            serverResult.textContent = '(no transcript returned)';
+          }
+          statusEl.textContent = 'Idle';
+        } catch (e) {
+          console.error('Upload error', e);
+          statusEl.textContent = 'Upload error';
+        }
       }
 
       recordBtn.disabled = false;
