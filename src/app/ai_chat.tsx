@@ -20,7 +20,7 @@ export default function AIChat() {
         </div>
         <div className="chat-input">
           <input type="text" id="userInput" placeholder="Type your question..." />
-          <button>Send</button>
+          <button className="input-button">Send</button>
         </div>
       </div>
     </div>

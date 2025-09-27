@@ -1,0 +1,5 @@
+input {
+  border: 1.5px solid black; /* Sets a 2px solid blue border */
+  padding: 0.5em;
+  border-radius: 3%;
+}

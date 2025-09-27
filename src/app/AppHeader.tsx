@@ -15,21 +15,22 @@ export default function AppHeader() {
                         </Link>
                     </div>
 
-                    <p
-                        style={{
-                            position: 'absolute',
-                            left: '50%',
-                            top: '50%',
-                            transform: 'translate(-50%, -50%)',
-                            margin: 0,
-                            fontFamily: 'Bodoni MyCustom',
-                            fontStyle: 'italic',
-                            whiteSpace: 'nowrap',
-                            zIndex: 2
-                        }}
-                    >
-                        ComplyAI: The Compliance Tool of the Future
-                    </p>
+                                <p
+                                    className="header-center-text"
+                                    style={{
+                                        position: 'absolute',
+                                        left: '50%',
+                                        top: '50%',
+                                        transform: 'translate(-50%, -50%)',
+                                        margin: 0,
+                                        fontFamily: 'Bodoni MyCustom',
+                                        fontStyle: 'italic',
+                                        whiteSpace: 'nowrap',
+                                        zIndex: 2
+                                    }}
+                                >
+                                    ComplyAI: The Compliance Tool of the Future
+                                </p>
 
                     <div style={{ display: 'flex', alignItems: 'center' }}>
                         <Link href="/profile">
