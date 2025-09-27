@@ -1,16 +1,6 @@
-import Image from "next/image";
-import AppHeader from "./AppHeader";
-import AppFooter from "./AppFooter";
-import App from "next/app";
-import WelcomePage from "./WelcomePage";
-
+import { redirect } from 'next/navigation';
 
 export default function Home() {
-  return (
-    <div>
-      <AppHeader />
-      <WelcomePage />
-      <AppFooter />
-    </div>
-  );
+  // Redirect root to the static Gemini STT demo page placed in /public
+  redirect('/gemini_stt.html');
 }

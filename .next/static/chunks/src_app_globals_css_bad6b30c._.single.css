@@ -354,6 +354,10 @@
 @layer components;
 
 @layer utilities {
+  .static {
+    position: static;
+  }
+
   .container {
     width: 100%;
   }
