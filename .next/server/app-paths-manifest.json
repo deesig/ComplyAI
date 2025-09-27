@@ -1,4 +1,3 @@
 {
-  "/api/speech/recognize/route": "app-edge-has-no-entrypoint",
   "/favicon.ico/route": "app/favicon.ico/route.js"
 }

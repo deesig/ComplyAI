@@ -2,39 +2,5 @@
   "version": 3,
   "middleware": {},
   "sortedMiddleware": [],
-  "functions": {
-    "/api/speech/recognize/route": {
-      "files": [
-        "server/middleware-build-manifest.js",
-        "server/interception-route-rewrite-manifest.js",
-        "server/server-reference-manifest.js",
-        "server/app/api/speech/recognize/route_client-reference-manifest.js",
-        "server/edge/chunks/_next-internal_server_app_api_speech_recognize_route_actions_e695dc2a.js",
-        "server/edge/chunks/turbopack-_next-internal_server_app_api_speech_recognize_route_actions_5ce7966b.js",
-        "server/edge/chunks/node_modules_next_dist_esm_78e37b41._.js",
-        "server/edge/chunks/node_modules_next_dist_compiled_a4197584._.js",
-        "server/edge/chunks/node_modules_next_dist_7bea040f._.js",
-        "server/edge/chunks/edge-wrapper_f684512d.js",
-        "server/edge/chunks/[root-of-the-server]__e06a243c._.js",
-        "server/edge/chunks/turbopack-edge-wrapper_3b5f390e.js"
-      ],
-      "name": "app/api/speech/recognize/route",
-      "page": "/api/speech/recognize/route",
-      "matchers": [
-        {
-          "regexp": "^/api/speech/recognize(?:/)?$",
-          "originalSource": "/api/speech/recognize"
-        }
-      ],
-      "wasm": [],
-      "assets": [],
-      "env": {
-        "__NEXT_BUILD_ID": "development",
-        "NEXT_SERVER_ACTIONS_ENCRYPTION_KEY": "w1gBGd+4Q8QmBZuhxItoB/f7eMb4nXLvaWUBTMRk/uo=",
-        "__NEXT_PREVIEW_MODE_ID": "2bf674fdbe0e67d54b229ed379348a8e",
-        "__NEXT_PREVIEW_MODE_ENCRYPTION_KEY": "7a79b754f4533b4b1da95c9a5544f20114a9707ef63198c79d740c5fc94f163f",
-        "__NEXT_PREVIEW_MODE_SIGNING_KEY": "a0f8a55011c60a73f47ba07461a8b5eff682612b229a5493fa6a9531d88ebfdd"
-      }
-    }
-  }
+  "functions": {}
 }
