@@ -12,6 +12,12 @@
   --footer-background: #eaeaea;
 }
 
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
 body {
     font-family: var(--default-font-family);
 }
@@ -40,6 +46,16 @@ header {
     font-size: 1.5rem;
     font-weight: bold;
 }
+
+
+  .icon {
+      border-radius: 50%;
+      padding: 0.5em;
+      border: none;
+      z-index: 10;
+      pointer-events: none;
+
+  }
 
     /* Responsive design */
     @media (max-width: 768px) {
