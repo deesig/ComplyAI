@@ -1,8 +1,54 @@
 .profile-background {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        height: 70vh;
+        background-color: blue;
+}
+
+/* Profile page specific styles */
+.profile-form {
+    background: #fff;
+    padding: 32px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px #0001;
+    min-width: 320px;
+}
+
+.profile-form h2 {
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+.profile-form label {
+    display: block;
+    margin-bottom: 16px;
+    font-weight: 500;
+}
+
+.profile-form input[type="text"],
+.profile-form input[type="email"],
+.profile-form input[type="password"],
+.profile-form input[type="search"],
+.profile-form input[type="number"],
+.profile-form input[type="url"],
+.profile-form input[type="tel"],
+.profile-form select {
+    border: 1.5px solid #b3b3b3;
+    border-radius: 5px;
+    padding: 0.5em 0.75em;
+    font-size: 1rem;
+    background: #fff;
+    color: #222;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
     width: 100%;
-    height: 70vh;
-    background-color: blue;
+}
+
+.profile-form input:focus,
+.profile-form select:focus {
+    border-color: #2563eb;
+    box-shadow: 0 0 0 2px #2563eb22;
 }

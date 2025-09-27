@@ -1,3 +1,5 @@
+import Link from "./Link";
+
 export default function WelcomePage() {
     return (
       <div>
@@ -6,7 +8,9 @@ export default function WelcomePage() {
             <h1>Welcome to the AI Compliance Checker</h1>
             <p>Use AI to quickly assess your compliance with government standards and regulations.</p>
 
-            <button>Get Started</button>
+            <Link href="/ai_chat">
+              <button>Get Started</button>
+            </Link>
             </div>
         </main>
       </div>

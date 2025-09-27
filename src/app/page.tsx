@@ -7,10 +7,12 @@ import WelcomePage from "./WelcomePage";
 
 export default function Home() {
   return (
-    <div>
+    <>
       <AppHeader />
-      <WelcomePage />
+      <main>
+        <WelcomePage />
+      </main>
       <AppFooter />
-    </div>
+    </>
   );
 }

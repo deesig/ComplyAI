@@ -2,49 +2,147 @@
 
 @import url("https://fonts.googleapis.com/css?family=Proza+Libre");
 @import url("https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,700;1,400;1,700&display=swap");
-
-:root {
-  --title-font-family: "Raleway", sans-serif;
-  --default-font-family: "Lato", sans-serif;
-
-  --body-color: #f4f7fa;
-  --header-background: #1a73e8;
-  --footer-background: #eaeaea;
+/* Profile page input styling */
+form input[type="text"],
+form input[type="email"],
+form input[type="password"],
+form input[type="search"],
+form input[type="number"],
+form input[type="url"],
+form input[type="tel"],
+form {
+  border: 1.5px solid #b3b3b3;
+  border-radius: 5px;
+  padding: 0.5em 0.75em;
+  font-size: 1rem;
+  background: #fff;
+  color: #222;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
 }
 
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
+form input:focus,
+form select:focus {
+  border-color: #2563eb;
+  box-shadow: 0 0 0 2px #2563eb22;
+}
 
-body {
-    font-family: var(--default-font-family);
+
+
+
+
+  /* background: var(--body-color);
+  color: #eaeaea;
+} */
+
+.header-items {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+
+header {
+  background: linear-gradient(90deg, #2563eb 0%, #60a5fa 100%);
+  color: #fff;
+  height: 72px;
+  min-height: 72px;
+  max-height: 72px;
+  padding: 0;
+  text-align: center;
+  font-size: 2rem;
+  font-weight: 800;
+  width: 100%;
+  box-sizing: border-box;
+  box-shadow: 0 2px 12px 0 rgba(30, 80, 200, 0.10);
+  letter-spacing: 1px;
+  position: relative;
+  z-index: 10;
+  display: flex;
+  align-items: center;
 }
 
 footer {
-    background-color: var(--footer-background);
-    text-align: center;
-    padding: 1rem;
-    font-size: 0.9rem;
+  background: linear-gradient(90deg, #e0e7ef 0%, #f8fafc 100%);
+  color: #222;
 }
+
+.header-items {
+  display: flex;
+  justify-content: space-between;
+footer {
+  background: linear-gradient(90deg, #eaeaea 0%, #c0d6f9 100%);
+  color: #222;
+  text-align: center;
+  padding: 1.2rem 0;
+  font-size: 1.1rem;
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  box-shadow: 0 -2px 12px 0 rgba(30, 80, 200, 0.07);
+  border-top: 1px solid #d0e0f7;
+}
+  align-items: center;
 
 a {
     color: #eaeaea;
 }
 
 .header-items {
-    display: flex;
-    justify-content: space-between;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  padding: 0 2rem;
+  box-sizing: border-box;
+}
+img[src*="ComplyAI_Logo.png"] {
+  height: 6em;
+  width: 6em;
+  object-fit: contain;
+  display: block;
+}
 }
 
+.header-items h1 {
+  margin: 0;
+}
+.header-items h1 {
+  margin: 0;
+  font-family: var(--title-font-family);
+  font-size: 2.2rem;
+  font-weight: 900;
+  background: linear-gradient(90deg, #fff 30%, #b3d1ff 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  text-fill-color: transparent;
+  letter-spacing: 2px;
+  text-shadow: 0 2px 8px rgba(30, 80, 200, 0.10);
+}
+
+
 header {
-    background-color: var(--header-background);
-    color: white;
-    padding: 1rem 2rem;
-    text-align: center;
-    font-size: 1.5rem;
-    font-weight: bold;
+  background-color: var(--header-background);
+  color: white;
+  padding: 1rem 0 1rem 0;
+  text-align: center;
+  font-size: 1.5rem;
+  font-weight: bold;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.header-items {
+  display: flex;
+  justify-content: space-between;
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0;
+}
+html, body {
+  overflow-x: hidden;
 }
 
 

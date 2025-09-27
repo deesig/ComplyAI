@@ -1,3 +1,4 @@
+@import url('https://fonts.cdnfonts.com/css/bodoni'); /* Example URL, may vary */
 
     html, body {
       height: 100%;
@@ -47,16 +48,19 @@
     .content button {
       padding: 0.8rem 2rem;
       font-size: 1rem;
-      background-color: var(--header-background);
-      color: white;
+      background: linear-gradient(90deg, #2563eb 0%, #60a5fa 100%);
+      color: #fff;
       border: none;
       border-radius: 5px;
       cursor: pointer;
-      transition: background-color 0.3s;
+      font-weight: 700;
+      box-shadow: 0 2px 8px 0 rgba(30, 80, 200, 0.10);
+      transition: background 0.3s, color 0.3s;
     }
 
     .content button:hover {
-      background-color: var(--header-background);
+      background: linear-gradient(90deg, #1746a0 0%, #2563eb 100%);
+      color: #fff;
     }
 
     footer {
