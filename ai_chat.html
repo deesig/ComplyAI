@@ -4,143 +4,13 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>AI Compliance Assistant</title>
-  <link rel="stylesheet" href="css/index.css" />
+  <link rel="stylesheet" href="css/ai_chat.css" />
   <link rel="stylesheet" href="css/global.css" />
 
   <link
       href="//netdna.bootstrapcdn.com/font-awesome/3.2.1/css/font-awesome.css"
       rel="stylesheet"
     />
-  <style>
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-
-    .body-components {
-      display: flex;
-      flex-direction: row;
-      height: 100%;
-      background-color: #f4f7fa;
-      color: #333;
-    }
-
-    /* Sidebar */
-.sidebar {
-  width: 250px;
-  background-color: #ffffff;
-  border-right: 1px solid #ddd;
-  padding: 1rem;
-  overflow-y: auto;
-}
-
-.sidebar h2 {
-  font-size: 1.2rem;
-  margin-bottom: 1rem;
-}
-
-.history-item {
-  padding: 0.6rem;
-  margin-bottom: 0.5rem;
-  background-color: #f0f0f0;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.2s;
-}
-
-.history-item:hover {
-  background-color: #e0e0e0;
-}
-
-/* Main Chat Area */
-.chat-container {
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  height: 100vh;
-}
-
-.chat-messages {
-  flex: 1;
-  padding: 1rem;
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
-
-/* Message wrapper for alignment */
-.message-wrapper {
-  display: flex;
-}
-
-.message {
-  padding: 0.6rem 1rem;
-  border-radius: 16px;
-  font-size: 1rem;
-  line-height: 1.4;
-  word-wrap: break-word;
-  white-space: pre-wrap;
-  max-width: 80%;
-}
-
-/* User messages (right) */
-.user-message {
-  background-color: #1a73e8;
-  color: white;
-  border-bottom-right-radius: 0;
-  margin-left: auto;
-}
-
-/* AI messages (left) */
-.ai-message {
-  background-color: #eaeaea;
-  color: #000;
-  border-bottom-left-radius: 0;
-  margin-right: auto;
-}
-
-/* Chat Input */
-.chat-input {
-  display: flex;
-  padding: 1rem;
-  border-top: 1px solid #ccc;
-  background-color: #fff;
-}
-
-.chat-input input {
-  flex: 1;
-  padding: 0.8rem;
-  font-size: 1rem;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  margin-right: 1rem;
-}
-
-.chat-input button {
-  padding: 0.8rem 1.2rem;
-  font-size: 1rem;
-  background-color: #1a73e8;
-  color: white;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-}
-
-.chat-input button:hover {
-  background-color: #0f5ac4;
-}
-
-    @media (max-width: 768px) {
-
-      .chat-container {
-        width: 100%;
-      }
-    }
-  </style>
 </head>
 <body>
 
@@ -152,7 +22,7 @@
         AI Compliance Checker
         </a>
 
-        <a href="index.html">
+        <a href="profile.html">
             <button class="icon"><i class="fa-solid fa-user"></i></button>
         </a>
     </div>
@@ -187,32 +57,8 @@
   <footer>
     &copy; 2025 AI Compliance Inc. All rights reserved.
   </footer>
-
-  <script>
-    function sendMessage() {
-      const input = document.getElementById("userInput");
-      const message = input.value.trim();
-      if (message === "") return;
-
-      const chatMessages = document.getElementById("chatMessages");
-
-      // Add user message
-      const userMsg = document.createElement("div");
-      userMsg.className = "message user-message";
-      userMsg.textContent = message;
-      chatMessages.appendChild(userMsg);
-
-      // Add dummy AI reply (replace this with real backend later)
-      const aiReply = document.createElement("div");
-      aiReply.className = "message ai-message";
-      aiReply.textContent = "✅ Noted. Let me analyze that for you...";
-      setTimeout(() => chatMessages.appendChild(aiReply), 500);
-
-      input.value = "";
-      chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
-  </script>
-
+  
+  <script src="js/ai_chat.js"></script>
 
 </body>
 <script src="https://kit.fontawesome.com/a1cd2dbedf.js" crossorigin="anonymous"></script>
