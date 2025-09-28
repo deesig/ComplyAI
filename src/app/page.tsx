@@ -1,9 +1,4 @@
-import Image from "next/image";
-import AppHeader from "./AppHeader";
-import AppFooter from "./AppFooter";
-import App from "next/app";
-import WelcomePage from "./WelcomePage";
-
+import { redirect } from 'next/navigation';
 
 export default function Home() {
   return (

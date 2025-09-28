@@ -1,4 +1,5 @@
 /* [project]/src/app/globals.css [app-client] (css) */
+<<<<<<< HEAD
 @layer properties {
   @supports (((-webkit-hyphens: none)) and (not (margin-trim: inline))) or ((-moz-orient: inline) and (not (color: rgb(from red r g b)))) {
     *, :before, :after {
@@ -51,6 +52,10 @@
   :root, :host {
     --default-transition-duration: .15s;
     --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);
+=======
+@layer theme {
+  :root, :host {
+>>>>>>> google-gemini-demo
     --default-font-family: var(--font-geist-sans);
     --default-mono-font-family: var(--font-geist-mono);
   }
@@ -404,6 +409,7 @@
 @layer components;
 
 @layer utilities {
+<<<<<<< HEAD
   .absolute {
     position: absolute;
   }
@@ -420,6 +426,16 @@
     position: static;
   }
 
+=======
+  .collapse {
+    visibility: collapse;
+  }
+
+  .static {
+    position: static;
+  }
+
+>>>>>>> google-gemini-demo
   .container {
     width: 100%;
   }
@@ -454,6 +470,7 @@
     }
   }
 
+<<<<<<< HEAD
   .contents {
     display: contents;
   }
@@ -485,12 +502,17 @@
 
   .italic {
     font-style: italic;
+=======
+  .inline {
+    display: inline;
+>>>>>>> google-gemini-demo
   }
 
   .antialiased {
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+<<<<<<< HEAD
 
   .filter {
     filter: var(--tw-blur, ) var(--tw-brightness, ) var(--tw-contrast, ) var(--tw-grayscale, ) var(--tw-hue-rotate, ) var(--tw-invert, ) var(--tw-saturate, ) var(--tw-sepia, ) var(--tw-drop-shadow, );
@@ -501,6 +523,8 @@
     transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
     transition-duration: var(--tw-duration, var(--default-transition-duration));
   }
+=======
+>>>>>>> google-gemini-demo
 }
 
 :root {
@@ -521,6 +545,7 @@ body {
   font-family: Arial, Helvetica, sans-serif;
 }
 
+<<<<<<< HEAD
 @property --tw-rotate-x {
   syntax: "*";
   inherits: false
@@ -618,4 +643,6 @@ body {
   inherits: false
 }
 
+=======
+>>>>>>> google-gemini-demo
 /*# sourceMappingURL=src_app_globals_css_bad6b30c._.single.css.map*/
