@@ -89,27 +89,73 @@ export default function AIChat() {
     }
   }
 
-  // Example checklist items per role (static for now)
-  const defaultChecklist = [
-    "Reviewed compliance documentation",
-    "Completed required training",
-    "Submitted audit evidence",
-    "Addressed previous findings"
-  ];
 
-  // Initialize checklist state for each role
+  // Initialize checklist state for each role using AI-generated checklists
   useEffect(() => {
-    if (roles.length > 0 && Object.keys(roleChecklists).length === 0) {
-      const initial: typeof roleChecklists = {};
-      roles.forEach(role => {
-        initial[role] = {
-          items: defaultChecklist,
-          checked: Array(defaultChecklist.length).fill(false),
-          notes: Array(defaultChecklist.length).fill("")
-        };
-      });
-      setRoleChecklists(initial);
+    async function fetchChecklists() {
+      if (roles.length > 0 && Object.keys(roleChecklists).length === 0) {
+        const initial: typeof roleChecklists = {};
+        for (const role of roles) {
+          // Query the AI for a checklist for this role
+          const promptMessage =
+            promptContext +
+            `\n\nFor the role of '${role}', can you give me a checklist of a few items that this role must have in order to be security compliant? Please return only a 5 items in a plain list, nothing else. Example output: "Implement and enforce organizational security policies and procedures. Manage and regularly review user access controls and permissions. Oversee vulnerability management, patching, and system hardening. Maintain and regularly test an incident response and disaster recovery plan. Ensure data protection through encryption, backups, and data loss prevention measures."`;
+          try {
+            const response = await fetch('http://localhost:4000/api/ask', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: promptMessage }),
+            });
+            let checklistItems: string[] = [];
+            if (response.ok) {
+              const data = await response.json();
+              // Try to parse the response as a list (split by newlines, dashes, or numbers)
+              const raw = data.output || "";
+              console.log(`Checklist for role ${role}:`, raw); 
+              checklistItems = raw
+                .split(/\n|\r/)
+                .map((line: string) => line.replace(/^[-*\d.\s]+/, "").trim())
+                .filter((line: string) => line.length > 0);
+              // Fallback to default if parsing fails
+              if (checklistItems.length === 0) {
+                checklistItems = [
+                  "Reviewed compliance documentation",
+                  "Completed required training",
+                  "Submitted audit evidence",
+                  "Addressed previous findings"
+                ];
+              }
+            } else {
+              checklistItems = [
+                "Reviewed compliance documentation",
+                "Completed required training",
+                "Submitted audit evidence",
+                "Addressed previous findings"
+              ];
+            }
+            initial[role] = {
+              items: checklistItems,
+              checked: Array(checklistItems.length).fill(false),
+              notes: Array(checklistItems.length).fill("")
+            };
+          } catch {
+            // On error, fallback to default
+            initial[role] = {
+              items: [
+                "Reviewed compliance documentation",
+                "Completed required training",
+                "Submitted audit evidence",
+                "Addressed previous findings"
+              ],
+              checked: Array(4).fill(false),
+              notes: Array(4).fill("")
+            };
+          }
+        }
+        setRoleChecklists(initial);
+      }
     }
+    fetchChecklists();
     // eslint-disable-next-line
   }, [roles]);
 

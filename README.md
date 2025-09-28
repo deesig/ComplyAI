@@ -53,6 +53,12 @@ npm run dev
 # then open http://localhost:3000
 ```
 
+6. Run the back-end server:
+
+```bash
+node server.js
+```
+
 Build & start (production):
 
 ```bash
