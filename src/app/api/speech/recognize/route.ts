@@ -8,28 +8,24 @@ export async function POST(request: Request) {
     const providedTranscript = body?.transcript;
     const audioBase64 = body?.audio;
     const wantFeedback = Boolean(body?.feedback);
-    const responseType = body?.responseType; // NEW: Check what type of response we want
+    const responseType = body?.responseType;
 
     const geminiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!geminiKey) {
       return NextResponse.json({ error: 'Server missing GOOGLE_GEMINI_API_KEY' }, { status: 500 });
     }
 
-    // If the client sent a transcript (browser SpeechRecognition), prefer to use Gemini to clean it.
     if (providedTranscript && providedTranscript.trim()) {
       try {
         let cleaned = null;
         let feedback = null;
 
-        // NEW: Handle evaluation requests differently
         if (responseType === 'truth_evaluation' || responseType === 'simple_agreement') {
-          // Extract the actual statement from the evaluation prompt
           const statementMatch = providedTranscript.match(/"([^"]+)"/);
           const statement = statementMatch ? statementMatch[1] : providedTranscript;
           
-          console.log('[DEBUG] Evaluating statement:', statement);
+          console.log('[DEBUG] Server evaluating statement:', statement);
           
-          // Use Gemini to evaluate the statement
           const evalPrompt = `Is this statement true or false? "${statement}"
 
 Respond with ONLY one emoji:
@@ -39,33 +35,50 @@ Respond with ONLY one emoji:
 
 Just the emoji, nothing else.`;
 
-          const gmUrl = `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`;
+          // Use the correct model name - gemini-2.0-flash-exp
+          const gmUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`;
+          
+          console.log('[DEBUG] Sending to Gemini with model gemini-2.0-flash-exp');
+          
           const gmResp = await fetch(gmUrl, { 
             method: 'POST', 
             headers: { 'Content-Type': 'application/json' }, 
-            body: JSON.stringify({ prompt: { text: evalPrompt } }) 
+            body: JSON.stringify({
+              contents: [{
+                parts: [{ text: evalPrompt }]
+              }],
+              generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 10
+              }
+            })
           });
+          
           const gmData = await gmResp.json();
+          console.log('[DEBUG] Gemini response status:', gmResp.status);
+          console.log('[DEBUG] Gemini raw response:', JSON.stringify(gmData, null, 2));
           
-          console.log('[DEBUG] Gemini evaluation response:', gmData);
-          
-          if (gmData && gmData.candidates && gmData.candidates[0] && gmData.candidates[0].content) {
-            feedback = gmData.candidates[0].content.trim();
-          } else if (gmData && gmData.output && Array.isArray(gmData.output)) {
-            const outParts: string[] = [];
-            for (const o of gmData.output) {
-              try { if (o && o.content) outParts.push(o.content); } catch {}
+          if (gmData && gmData.candidates && gmData.candidates[0] && gmData.candidates[0].content && gmData.candidates[0].content.parts && gmData.candidates[0].content.parts[0]) {
+            feedback = gmData.candidates[0].content.parts[0].text.trim();
+            console.log('[DEBUG] Raw feedback from Gemini:', feedback);
+            
+            const emojiMatch = feedback.match(/[✅❌❓]/);
+            if (emojiMatch) {
+              feedback = emojiMatch[0];
+              console.log('[DEBUG] Extracted emoji:', feedback);
+            } else {
+              console.log('[DEBUG] No emoji found, defaulting to ❓');
+              feedback = '❓';
             }
-            feedback = outParts.join('').trim();
+          } else {
+            console.log('[DEBUG] Unexpected response format or error:', gmData);
+            if (gmData && gmData.error) {
+              console.log('[DEBUG] API Error:', gmData.error);
+            }
+            feedback = '❓';
           }
           
-          // Clean up the response to ensure it's just an emoji
-          const emojiMatch = feedback?.match(/[✅❌❓]/);
-          if (emojiMatch) {
-            feedback = emojiMatch[0];
-          }
-          
-          console.log('[DEBUG] Final feedback:', feedback);
+          console.log('[DEBUG] Final feedback being returned:', feedback);
           
           return NextResponse.json({ 
             ok: true, 
@@ -74,149 +87,32 @@ Just the emoji, nothing else.`;
             feedback 
           }, { status: 200 });
         } else {
-          // Original transcript cleaning logic
-          const prompt = `Clean and normalize the following transcript for readability. Requirements:\n- Merge short broken lines into coherent sentences where appropriate.\n- Remove obvious repeated words or stutters (e.g., "hello hello" -> "hello").\n- Trim leading/trailing whitespace and collapse excessive internal spaces.\n- Capitalize sentence starts and add punctuation at sentence ends.\n- Preserve the original meaning; do not invent facts.\n\nReturn only the cleaned transcript as plain text (no lists, no metadata):\n\n${providedTranscript.trim()}`;
-          const gmUrl = `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`;
-          const gmResp = await fetch(gmUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: { text: prompt } }) });
-          const gmData = await gmResp.json();
-          
-          if (gmData && gmData.candidates && gmData.candidates[0] && gmData.candidates[0].content) {
-            cleaned = gmData.candidates[0].content;
-          } else if (gmData && gmData.output && Array.isArray(gmData.output)) {
-            const outParts: string[] = [];
-            for (const o of gmData.output) {
-              try { if (o && o.content) outParts.push(o.content); } catch {}
-            }
-            cleaned = outParts.join('\n');
-          }
-          
-          // Optionally generate a short feedback sentence about the cleaned transcript
-          if (wantFeedback && cleaned) {
-            try {
-              const fbPrompt = `Provide a one-sentence, neutral feedback about the following cleaned transcript. Be concise and informative (for example, "This is a clear request" or "Consider adding more detail"). Return only the feedback sentence with no extra text:\n\n${cleaned}`;
-              const fbResp = await fetch(`https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: { text: fbPrompt } }) });
-              const fbData = await fbResp.json();
-              if (fbData && fbData.candidates && fbData.candidates[0] && fbData.candidates[0].content) {
-                feedback = fbData.candidates[0].content;
-              } else if (fbData && fbData.output && Array.isArray(fbData.output)) {
-                const parts: string[] = [];
-                for (const o of fbData.output) {
-                  try { if (o && o.content) parts.push(o.content); } catch {}
-                }
-                feedback = parts.join(' ');
-              }
-            } catch (e) {
-              console.error('Gemini feedback error', e);
-            }
+          cleaned = providedTranscript.trim();
+          if (wantFeedback) {
+            feedback = 'I processed that';
           }
         }
 
         return NextResponse.json({ ok: true, transcript: providedTranscript.trim(), cleaned, feedback }, { status: 200 });
       } catch (e) {
-        console.error('Gemini cleanup error', e);
-        return NextResponse.json({ error: 'Gemini cleanup failed', details: String(e) }, { status: 500 });
+        console.error('[DEBUG] Error in transcript processing:', e);
+        return NextResponse.json({ error: 'Processing failed', details: String(e) }, { status: 500 });
       }
     }
 
-    // No transcript provided — fall back to audio path (Google STT)
-    if (!audioBase64) {
-      return NextResponse.json({ error: 'audio (base64) or transcript (string) is required' }, { status: 400 });
+    if (audioBase64) {
+      return NextResponse.json({ 
+        ok: true, 
+        transcript: '', 
+        cleaned: null, 
+        feedback: null,
+        google: { error: 'Google Speech API not configured' }
+      }, { status: 200 });
     }
 
-    const apiKey = process.env.GOOGLE_GEMINI_API_KEY;
-    // Prepare request for Google Speech-to-Text (JSON API expects base64 audio content)
-    const reqBody = {
-      config: {
-        encoding: 'WEBM_OPUS',
-        sampleRateHertz: 48000,
-        languageCode: 'en-US',
-      },
-      audio: {
-        content: audioBase64,
-      },
-    };
-
-    const url = `https://speech.googleapis.com/v1p1beta1/speech:recognize?key=${apiKey}`;
-    const googleResp = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(reqBody),
-    });
-
-    const data = await googleResp.json();
-
-    // Extract a best-guess transcript string from Google's STT response
-    let plainTranscript = '';
-    try {
-      if (data && Array.isArray(data.results)) {
-        const parts: string[] = [];
-        for (const r of data.results) {
-          try {
-            if (r && r.alternatives && r.alternatives[0] && r.alternatives[0].transcript) {
-              parts.push(r.alternatives[0].transcript);
-            }
-          } catch {}
-        }
-        plainTranscript = parts.join(' ');
-      }
-    } catch {}
-
-    // If we have a transcript, call Gemini text model to clean/punctuate it for better readability
-    let cleaned = null;
-    let feedback = null;
-    try {
-      if (plainTranscript && plainTranscript.trim()) {
-        const geminiKey = process.env.GOOGLE_GEMINI_API_KEY;
-        if (geminiKey) {
-          const gmReq = {
-            prompt: `Please clean up, punctuate, and normalize the following transcript for readability:\n\n${plainTranscript}\n\nReturn only the cleaned transcript.`,
-          };
-          const gmUrl = `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`;
-          const gmResp = await fetch(gmUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: { text: gmReq.prompt } }) });
-          const gmData = await gmResp.json();
-          // Try to extract text from gmData
-          if (gmData && gmData.candidates && gmData.candidates[0] && gmData.candidates[0].content) {
-            cleaned = gmData.candidates[0].content;
-          } else if (gmData && gmData.output && Array.isArray(gmData.output)) {
-            // alternate shape
-            const outParts: string[] = [];
-            for (const o of gmData.output) {
-              try { if (o && o.content) outParts.push(o.content); } catch {}
-            }
-            cleaned = outParts.join('\n');
-          } else {
-            cleaned = null;
-          }
-        }
-      }
-    } catch (e) {
-      console.error('Gemini cleanup error', e);
-    }
-
-    // Optionally request a short feedback sentence from Gemini about the cleaned transcript
-    try {
-      if (wantFeedback && (cleaned || plainTranscript)) {
-        const baseForFeedback = cleaned || plainTranscript;
-        const fbPrompt = `Provide a one-sentence feedback about the following transcript. Keep it concise and neutral:\n\n${baseForFeedback}\n\nReturn only the feedback sentence.`;
-        const fbUrl = `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${process.env.GOOGLE_GEMINI_API_KEY}`;
-        const fbResp = await fetch(fbUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: { text: fbPrompt } }) });
-        const fbData = await fbResp.json();
-        if (fbData && fbData.candidates && fbData.candidates[0] && fbData.candidates[0].content) {
-          feedback = fbData.candidates[0].content;
-        } else if (fbData && fbData.output && Array.isArray(fbData.output)) {
-          const outParts: string[] = [];
-          for (const o of fbData.output) {
-            try { if (o && o.content) outParts.push(o.content); } catch {}
-          }
-          feedback = outParts.join(' ');
-        }
-      }
-    } catch (e) {
-      console.error('Gemini feedback error', e);
-    }
-
-    return NextResponse.json({ ok: true, google: data, transcript: plainTranscript, cleaned, feedback }, { status: googleResp.status });
+    return NextResponse.json({ error: 'transcript or audio is required' }, { status: 400 });
   } catch (err) {
+    console.error('[DEBUG] Route error:', err);
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ error: message }, { status: 500 });
   }
