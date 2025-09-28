@@ -5,7 +5,8 @@ import "./css/global.css";
 import Link from "./Link";
 
 type Message = {
-  text: string;
+  text?: string;
+  imageUrl?: string;
   sender: "user" | "ai";
 };
 
@@ -28,11 +29,10 @@ export default function AIChat() {
 
   const userMsg: Message = { text: input, sender: "user" };
   setMessages((prev) => [...prev, userMsg]);
-
   setInput("");
 
-  // Add a loading indicator message (e.g., '...')
-  const loadingMsg: Message = { text: "…", sender: "ai" };
+  // Show loading GIF
+  const loadingMsg: Message = { imageUrl: "/loading.gif", sender: "ai" };
   setMessages((prev) => [...prev, loadingMsg]);
 
   try {
@@ -103,7 +103,12 @@ async function ai_test() {
               key={i}
               className={`message-wrapper ${msg.sender === "user" ? "user-wrapper" : "ai-wrapper"}`}
             >
-              <div className={`message ${msg.sender === "user" ? "user-message" : "ai-message"}`}>{msg.text}</div>
+              {msg.imageUrl ? (<div className="ai-message">
+      <img src={msg.imageUrl} alt="loading" className="loading-gif" /></div>
+    ) : (
+      <div className={`message ${msg.sender === "user" ? "user-message" : "ai-message"}`}>
+        {msg.text}
+      </div>)}
             </div>
           ))}
           <div ref={messagesEndRef} />

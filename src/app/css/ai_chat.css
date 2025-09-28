@@ -148,3 +148,8 @@
 .input-button {
   width: 7em;
 }
+
+.loading-gif {
+  width: 3em;
+  height: 3em;
+}
