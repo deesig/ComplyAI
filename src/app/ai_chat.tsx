@@ -1,8 +1,11 @@
 "use client";
 import React, { useState, useRef, useEffect } from "react";
+
 import "./css/ai_chat.css";
 import "./css/global.css";
 import Link from "./Link";
+// @ts-ignore
+
 
 type Message = {
   text?: string;
@@ -36,6 +39,43 @@ export default function AIChat() {
   const [activeRoleIdx, setActiveRoleIdx] = useState(0);
   const [roleChecklists, setRoleChecklists] = useState<{ [role: string]: { items: string[]; checked: boolean[]; notes: string[] } }>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Handle file upload in General Chat (text files only)
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith('text/')) {
+      alert('Only text files are supported.');
+      return;
+    }
+    const reader = new FileReader();
+    const text = await new Promise<string>((resolve) => {
+      reader.onload = (event) => resolve(event.target?.result as string || "");
+      reader.readAsText(file);
+    });
+    if (!text) return;
+    const userMsg: Message = { text: `[Document Upload: ${file.name}]\n${text.substring(0, 4000)}`, sender: "user" };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    const loadingMsg: Message = { imageUrl: "/loading.gif", sender: "ai" };
+    setMessages((prev) => [...prev, loadingMsg]);
+    var promptMessage = promptContext + `\n\nUser uploaded a document (${file.name}):\n${text.substring(0, 4000)}\n\nUser: Please analyze or summarize the above document.\nExamples:` + promptExamples;
+    try {
+      const response = await fetch('http://localhost:4000/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: promptMessage }),
+      });
+      if (!response.ok) {
+        setMessages(prev => prev.filter(msg => msg !== loadingMsg));
+        return;
+      }
+      const data = await response.json();
+      setMessages(prev => prev.map(msg => msg === loadingMsg ? { text: data.output, sender: "ai" } : msg));
+    } catch {
+      setMessages(prev => prev.filter(msg => msg !== loadingMsg));
+    }
+  }
 
   // Get roles from profile
   let roles: string[] = [];
@@ -100,66 +140,94 @@ export default function AIChat() {
   }, []);
 
   async function sendMessage() {
-  if (!input.trim()) return;
+    if (!input.trim()) return;
 
-  const userMsg: Message = { text: input, sender: "user" };
-  setMessages((prev) => [...prev, userMsg]);
-  setInput("");
+    const userMsg: Message = { text: input, sender: "user" };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
 
-  // Show loading GIF
-  const loadingMsg: Message = { imageUrl: "/loading.gif", sender: "ai" };
-  setMessages((prev) => [...prev, loadingMsg]);
+    // Show loading GIF
+    const loadingMsg: Message = { imageUrl: "/loading.gif", sender: "ai" };
+    setMessages((prev) => [...prev, loadingMsg]);
 
-  //Final prompt to send to API including context and examples
-  var promptMessage = promptContext + "\n\nUser: " + userMsg.text + "\nExamples:" + promptExamples;
-  console.log('Prompt Message:', promptMessage);
+    // Get user profile info from localStorage
+    let userProfileString = "";
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem("profileTabs");
+      if (saved) {
+        try {
+          const profile = JSON.parse(saved);
+          const bp = profile.businessProfile || {};
+          const roles = profile.roles || [];
+          const additionalInfo = profile.additionalInfo || "";
+          userProfileString = `\nUser Profile:\nIndustry/Sector: ${bp.industry || ""}\nBusiness Size: ${bp.size || ""}\nLocation: ${bp.location || ""}\nFrameworks: ${bp.frameworks || ""}\nRoles: ${roles.join(", ")}\nAdditional Info: ${additionalInfo}`;
+        } catch {}
+      }
+    }
 
-  try {
+
+    // Include recent chat history (last 6 messages, excluding loading GIFs)
+    const historyMessages = messages
+      .filter(m => m.text) // Only text messages
+      .slice(-6)
+      .map(m => `${m.sender === "user" ? "User" : "AI"}: ${m.text}`)
+      .join("\n");
+
+    // Final prompt to send to API including context, user profile, chat history, and examples
+    var promptMessage =
+      promptContext +
+      userProfileString +
+      (historyMessages ? `\n\nRecent Conversation:\n${historyMessages}` : "") +
+      `\n\nUser: ${userMsg.text}\nExamples:` +
+      promptExamples;
+    console.log('Prompt Message:', promptMessage);
+
+    try {
+      const response = await fetch('http://localhost:4000/api/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: promptMessage }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('API error:', response.statusText, errorData);
+        // Remove loading message if error
+        setMessages(prev => prev.filter(msg => msg !== loadingMsg));
+        return;
+      }
+
+      const data = await response.json();
+
+      // Replace loading message with AI response
+      setMessages(prev =>
+        prev.map(msg =>
+          msg === loadingMsg ? { text: data.output, sender: "ai" } : msg
+        )
+      );
+    } catch (error) {
+      console.error("Fetch error:", error);
+      // Remove loading message if error
+      setMessages(prev => prev.filter(msg => msg !== loadingMsg));
+    }
+  }
+
+  async function ai_test() {
     const response = await fetch('http://localhost:4000/api/ask', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: promptMessage }),
+      body: JSON.stringify({ message: "In a sentence, describe AI." }), // or whatever input you want
     });
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => null);
       console.error('API error:', response.statusText, errorData);
-      // Remove loading message if error
-      setMessages(prev => prev.filter(msg => msg !== loadingMsg));
       return;
     }
 
     const data = await response.json();
-
-    // Replace loading message with AI response
-    setMessages(prev =>
-      prev.map(msg =>
-        msg === loadingMsg ? { text: data.output, sender: "ai" } : msg
-      )
-    );
-  } catch (error) {
-    console.error("Fetch error:", error);
-    // Remove loading message if error
-    setMessages(prev => prev.filter(msg => msg !== loadingMsg));
+    console.log('AI output:', data.output);
   }
-}
-
-async function ai_test() {
-  const response = await fetch('http://localhost:4000/api/ask', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message: "In a sentence, describe AI." }), // or whatever input you want
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => null);
-    console.error('API error:', response.statusText, errorData);
-    return;
-  }
-
-  const data = await response.json();
-  console.log('AI output:', data.output);
-}
 
 
   function handleInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
@@ -258,28 +326,34 @@ async function ai_test() {
                     key={i}
                     className={`message-wrapper ${msg.sender === "user" ? "user-wrapper" : "ai-wrapper"}`}
                   >
-                    {msg.imageUrl ? (<div className="ai-message">
-              <img src={msg.imageUrl} alt="loading" className="loading-gif" /></div>
-            ) : (
-              <div className={`message ${msg.sender === "user" ? "user-message" : "ai-message"}`}>
-                {msg.text}
-              </div>)}
+                    {msg.imageUrl ? (
+                      <div className="ai-message">
+                        <img src={msg.imageUrl} alt="loading" className="loading-gif" />
+                      </div>
+                    ) : (
+                      <div className={`message ${msg.sender === "user" ? "user-message" : "ai-message"}`}>
+                        {msg.text}
+                      </div>
+                    )}
                   </div>
                 ))}
                 <div ref={messagesEndRef} />
               </div>
-              <div className="chat-input">
-                <input
-                  type="text"
-                  id="userInput"
-                  placeholder="Type your question..."
-                  value={input}
-                  onChange={e => setInput(e.target.value)}
-                  onKeyDown={handleInputKeyDown}
-                  autoComplete="off"
-                  disabled={showProfileModal}
-                />
-                <button className="input-button" onClick={sendMessage} disabled={showProfileModal}>Send</button>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 8 }}>
+                <div className="chat-input">
+                  <input
+                    type="text"
+                    id="userInput"
+                    placeholder="Type your question..."
+                    value={input}
+                    onChange={e => setInput(e.target.value)}
+                    onKeyDown={handleInputKeyDown}
+                    autoComplete="off"
+                    disabled={showProfileModal}
+                  />
+                  <button className="input-button" onClick={sendMessage} disabled={showProfileModal}>Send</button>
+                </div>
+
               </div>
             </>
           )}
