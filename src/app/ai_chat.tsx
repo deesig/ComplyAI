@@ -20,11 +20,6 @@ Provide clear, concise, and accurate information to help users understand their 
 Always be professional and courteous in your responses.
 `;
 
-var promptExamples = 
-`
-
-`;
-
 
 export default function AIChat() {
   const [messages, setMessages] = useState<Message[]>([
@@ -59,7 +54,7 @@ export default function AIChat() {
     setInput("");
     const loadingMsg: Message = { imageUrl: "/loading.gif", sender: "ai" };
     setMessages((prev) => [...prev, loadingMsg]);
-    var promptMessage = promptContext + `\n\nUser uploaded a document (${file.name}):\n${text.substring(0, 4000)}\n\nUser: Please analyze or summarize the above document.\nExamples:` + promptExamples;
+    var promptMessage = promptContext + `\n\nUser uploaded a document (${file.name}):\n${text.substring(0, 4000)}\n\nUser: Please analyze or summarize the above document.\nExamples:`;
     try {
       const response = await fetch('http://localhost:4000/api/ask', {
         method: 'POST',
@@ -206,7 +201,15 @@ export default function AIChat() {
           const bp = profile.businessProfile || {};
           const roles = profile.roles || [];
           const additionalInfo = profile.additionalInfo || "";
+          const policyFileName = profile.policyFileName || "";
+          const companyPolicyText = bp.companyPolicyText || "";
           userProfileString = `\nUser Profile:\nIndustry/Sector: ${bp.industry || ""}\nBusiness Size: ${bp.size || ""}\nLocation: ${bp.location || ""}\nFrameworks: ${bp.frameworks || ""}\nRoles: ${roles.join(", ")}\nAdditional Info: ${additionalInfo}`;
+          if (policyFileName || companyPolicyText) {
+            userProfileString += `\nCompany Policy Document: ${policyFileName ? policyFileName : "(no file name)"}`;
+            if (companyPolicyText) {
+              userProfileString += `\nExtracted Policy Text (first 2000 chars):\n${companyPolicyText.slice(0, 2000)}`;
+            }
+          }
         } catch {}
       }
     }
@@ -224,8 +227,7 @@ export default function AIChat() {
       promptContext +
       userProfileString +
       (historyMessages ? `\n\nRecent Conversation:\n${historyMessages}` : "") +
-      `\n\nUser: ${userMsg.text}\nExamples:` +
-      promptExamples;
+      `\n\nUser: ${userMsg.text}`;
     console.log('Prompt Message:', promptMessage);
 
     try {

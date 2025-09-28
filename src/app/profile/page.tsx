@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
+// pdfjs-dist will be imported dynamically in the browser only
 import AppHeader from "../AppHeader";
 import AppFooter from "../AppFooter";
 import "./page.css";
@@ -19,8 +20,12 @@ export default function ProfilePage() {
     industry: "",
     size: "",
     location: "",
-    frameworks: ""
+    frameworks: "",
+    companyPolicyText: ""
   });
+  const [policyStatus, setPolicyStatus] = useState("");
+  const policyInputRef = useRef<HTMLInputElement>(null);
+  const [policyFileName, setPolicyFileName] = useState<string>("");
   // Tab 2 fields
   const [roles, setRoles] = useState<string[]>([]);
   const [roleInput, setRoleInput] = useState("");
@@ -36,14 +41,24 @@ export default function ProfilePage() {
     roles.length > 0
   );
   // Load from localStorage on mount
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem("profileTabs");
       if (saved) {
         const parsed = JSON.parse(saved);
-        setBusinessProfile(parsed.businessProfile || businessProfile);
+        // Merge loaded profile with default fields to ensure all exist
+        setBusinessProfile({
+          industry: "",
+          size: "",
+          location: "",
+          frameworks: "",
+          companyPolicyText: "",
+          ...parsed.businessProfile
+        });
         setRoles(parsed.roles || []);
         setAdditionalInfo(parsed.additionalInfo || "");
+        setPolicyFileName(parsed.policyFileName || "");
       }
       setLoaded(true);
     }
@@ -55,10 +70,11 @@ export default function ProfilePage() {
     if (loaded) {
       localStorage.setItem(
         "profileTabs",
-        JSON.stringify({ businessProfile, roles, additionalInfo })
+        JSON.stringify({ businessProfile, roles, additionalInfo, policyFileName })
       );
     }
-  }, [businessProfile, roles, additionalInfo, loaded]);
+    // Only depend on roles.length to avoid variable-length array warning
+  }, [businessProfile, roles.length, additionalInfo, policyFileName, loaded]);
 
   function handleBusinessChange(e: React.ChangeEvent<HTMLInputElement>) {
     setBusinessProfile({ ...businessProfile, [e.target.name]: e.target.value });
@@ -74,6 +90,11 @@ export default function ProfilePage() {
   function handleRemoveRole(idx: number) {
     setRoles(roles.filter((_, i) => i !== idx));
   }
+
+
+  useEffect(() => {
+    console.log("Updated companyPolicyText:", businessProfile.companyPolicyText);
+  }, [businessProfile.companyPolicyText]);
 
   if (!loaded) return null;
 
@@ -142,6 +163,97 @@ export default function ProfilePage() {
               <label>Framework(s) to Check Against <span style={{ color: 'red', fontWeight: 700 }}>*</span><br />
                 <input name="frameworks" value={businessProfile.frameworks} onChange={handleBusinessChange} style={{ width: "100%", marginBottom: 16 }} />
               </label>
+              {/* PDF Upload for Company Policy */}
+              <div style={{ marginTop: 32 }}>
+                <label htmlFor="policy-upload" style={{ fontWeight: 600 }}>Upload Company Policy PDF</label><br />
+                <input
+                  type="file"
+                  id="policy-upload"
+                  accept="application/pdf"
+                  ref={policyInputRef}
+                  style={{ marginBottom: 12 }}
+                />
+                <button
+                  type="button"
+                  style={{ marginBottom: 8, marginLeft: 8, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, padding: '6px 16px', fontWeight: 600, cursor: 'pointer' }}
+                  onClick={async () => {
+                    setPolicyStatus("");
+                    const file = policyInputRef.current?.files?.[0];
+                    if (!file) {
+                      setPolicyStatus("Please select a PDF file.");
+                      return;
+                    }
+                    if (file.type !== 'application/pdf') {
+                      setPolicyStatus("Only PDF files are supported.");
+                      return;
+                    }
+                    setPolicyFileName(file.name);
+                    try {
+                      // Dynamically import pdfjs-dist only in the browser
+                      // @ts-ignore
+                      const pdfjsLib = await import('pdfjs-dist/build/pdf');
+                      pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.js";
+                      const arrayBuffer = await file.arrayBuffer();
+                      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+                      let pdfText = '';
+                      for (let i = 1; i <= pdf.numPages; i++) {
+                        const page = await pdf.getPage(i);
+                        const content = await page.getTextContent();
+                        pdfText += content.items.map((item: any) => item.str).join(' ') + '\n';
+                      }
+                      setBusinessProfile(bp => ({ ...bp, companyPolicyText: pdfText }));
+                      setPolicyStatus("Policy PDF uploaded and extracted!");
+                    } catch (e) {
+                      setBusinessProfile(bp => ({ ...bp, companyPolicyText: '' }));
+                      setPolicyStatus("Failed to extract PDF text: " + (e && e.toString ? e.toString() : String(e)));
+                      setPolicyFileName("");
+                      // Also log error to console for debugging
+                      console.error("PDF extraction error:", e);
+                    }
+                  }}
+                >Extract Policy Text</button>
+                <div style={{ color: policyStatus.includes('fail') ? 'red' : 'green', fontSize: '0.95em' }}>{policyStatus}</div>
+                {/* Show file name and remove button if a file is loaded */}
+                {(policyFileName || businessProfile.companyPolicyText) && (
+                  <div style={{
+                    marginTop: 16,
+                    background: '#f4f7fa',
+                    border: '1px solid #d0e0f7',
+                    borderRadius: 6,
+                    padding: 12,
+                    maxHeight: 220,
+                    overflowY: 'auto',
+                    fontSize: 14,
+                    color: '#222',
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <span style={{ fontWeight: 600, color: '#2563eb' }}>
+                        {policyFileName ? `PDF: ${policyFileName}` : 'Extracted Policy Text Preview:'}
+                      </span>
+                      <button
+                        type="button"
+                        style={{ background: '#e53e3e', color: '#fff', border: 'none', borderRadius: 4, padding: '2px 10px', fontWeight: 600, cursor: 'pointer', marginLeft: 12 }}
+                        onClick={() => {
+                          setBusinessProfile(bp => ({ ...bp, companyPolicyText: '' }));
+                          setPolicyFileName("");
+                          if (policyInputRef.current) policyInputRef.current.value = "";
+                          setPolicyStatus("");
+                        }}
+                      >Remove</button>
+                    </div>
+                    <div style={{ whiteSpace: 'pre-wrap' }}>
+                      {businessProfile.companyPolicyText
+                        ? businessProfile.companyPolicyText.slice(0, 2000)
+                        : '(No text extracted)'}
+                    </div>
+                    {businessProfile.companyPolicyText.length > 2000 && (
+                      <div style={{ color: '#888', fontSize: 12, marginTop: 4 }}>
+                        ...truncated
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
           )}
           {activeTab === 1 && (

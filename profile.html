@@ -27,11 +27,65 @@
     </div>
   </header>
     <div class="profile-background">
-        <p>sd</p>
+      <form class="profile-form" id="profileForm">
+        <!-- ...existing profile fields... -->
+        <h2>Business Profile</h2>
+        <!-- Add your other profile fields here -->
+
+        <div style="margin-top: 32px;">
+          <label for="policy-upload" style="font-weight:600;">Upload Company Policy PDF</label>
+          <input type="file" id="policy-upload" accept="application/pdf" style="margin-bottom:12px;" />
+          <button type="button" id="extract-policy-btn" style="margin-bottom:8px;">Extract Policy Text</button>
+          <div id="policy-upload-status" style="color:green;font-size:0.95em;"></div>
+        </div>
+      </form>
     </div>
     <footer>
         &copy; 2025 AI Compliance Inc. All rights reserved.
     </footer>
 </body>
   <script src="https://kit.fontawesome.com/a1cd2dbedf.js" crossorigin="anonymous"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    // PDF extraction logic
+    document.getElementById('extract-policy-btn').onclick = async function() {
+      const fileInput = document.getElementById('policy-upload');
+      const statusDiv = document.getElementById('policy-upload-status');
+      statusDiv.textContent = '';
+      if (!fileInput.files || !fileInput.files[0]) {
+        statusDiv.textContent = 'Please select a PDF file.';
+        statusDiv.style.color = 'red';
+        return;
+      }
+      const file = fileInput.files[0];
+      if (file.type !== 'application/pdf') {
+        statusDiv.textContent = 'Only PDF files are supported.';
+        statusDiv.style.color = 'red';
+        return;
+      }
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+        const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        let pdfText = '';
+        for (let i = 1; i <= pdf.numPages; i++) {
+          const page = await pdf.getPage(i);
+          const content = await page.getTextContent();
+          pdfText += content.items.map(item => item.str).join(' ') + '\n';
+        }
+        // Save to localStorage (add to profileTabs.businessProfile.companyPolicyText)
+        let profile = {};
+        try {
+          profile = JSON.parse(localStorage.getItem('profileTabs')) || {};
+        } catch {}
+        if (!profile.businessProfile) profile.businessProfile = {};
+        profile.businessProfile.companyPolicyText = pdfText;
+        localStorage.setItem('profileTabs', JSON.stringify(profile));
+        statusDiv.textContent = 'Policy PDF uploaded and extracted!';
+        statusDiv.style.color = 'green';
+      } catch (e) {
+        statusDiv.textContent = 'Failed to extract PDF text.';
+        statusDiv.style.color = 'red';
+      }
+    };
+  </script>
 </html>
