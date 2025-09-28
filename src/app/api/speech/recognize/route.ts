@@ -5,9 +5,10 @@ export const runtime = 'edge';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-  const providedTranscript = body?.transcript;
-  const audioBase64 = body?.audio;
-  const wantFeedback = Boolean(body?.feedback);
+    const providedTranscript = body?.transcript;
+    const audioBase64 = body?.audio;
+    const wantFeedback = Boolean(body?.feedback);
+    const responseType = body?.responseType; // NEW: Check what type of response we want
 
     const geminiKey = process.env.GOOGLE_GEMINI_API_KEY;
     if (!geminiKey) {
@@ -17,40 +18,96 @@ export async function POST(request: Request) {
     // If the client sent a transcript (browser SpeechRecognition), prefer to use Gemini to clean it.
     if (providedTranscript && providedTranscript.trim()) {
       try {
-        // Stronger prompt: merge short broken lines, remove repeated words, normalize spacing,
-        // ensure capitalization and punctuation. Return only the cleaned transcript (no commentary).
-        const prompt = `Clean and normalize the following transcript for readability. Requirements:\n- Merge short broken lines into coherent sentences where appropriate.\n- Remove obvious repeated words or stutters (e.g., "hello hello" -> "hello").\n- Trim leading/trailing whitespace and collapse excessive internal spaces.\n- Capitalize sentence starts and add punctuation at sentence ends.\n- Preserve the original meaning; do not invent facts.\n\nReturn only the cleaned transcript as plain text (no lists, no metadata):\n\n${providedTranscript.trim()}`;
-        const gmUrl = `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`;
-        const gmResp = await fetch(gmUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: { text: prompt } }) });
-        const gmData = await gmResp.json();
         let cleaned = null;
         let feedback = null;
-        if (gmData && gmData.candidates && gmData.candidates[0] && gmData.candidates[0].content) {
-          cleaned = gmData.candidates[0].content;
-        } else if (gmData && gmData.output && Array.isArray(gmData.output)) {
-          const outParts: string[] = [];
-          for (const o of gmData.output) {
-            try { if (o && o.content) outParts.push(o.content); } catch {}
-          }
-          cleaned = outParts.join('\n');
-        }
-        // Optionally generate a short feedback sentence about the cleaned transcript
-        if (wantFeedback && cleaned) {
-          try {
-            const fbPrompt = `Provide a one-sentence, neutral feedback about the following cleaned transcript. Be concise and informative (for example, "This is a clear request" or "Consider adding more detail"). Return only the feedback sentence with no extra text:\n\n${cleaned}`;
-            const fbResp = await fetch(`https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: { text: fbPrompt } }) });
-            const fbData = await fbResp.json();
-            if (fbData && fbData.candidates && fbData.candidates[0] && fbData.candidates[0].content) {
-              feedback = fbData.candidates[0].content;
-            } else if (fbData && fbData.output && Array.isArray(fbData.output)) {
-              const parts: string[] = [];
-              for (const o of fbData.output) {
-                try { if (o && o.content) parts.push(o.content); } catch {}
-              }
-              feedback = parts.join(' ');
+
+        // NEW: Handle evaluation requests differently
+        if (responseType === 'truth_evaluation' || responseType === 'simple_agreement') {
+          // Extract the actual statement from the evaluation prompt
+          const statementMatch = providedTranscript.match(/"([^"]+)"/);
+          const statement = statementMatch ? statementMatch[1] : providedTranscript;
+          
+          console.log('[DEBUG] Evaluating statement:', statement);
+          
+          // Use Gemini to evaluate the statement
+          const evalPrompt = `Is this statement true or false? "${statement}"
+
+Respond with ONLY one emoji:
+✅ if TRUE or you AGREE
+❌ if FALSE or you DISAGREE  
+❓ if UNSURE or subjective
+
+Just the emoji, nothing else.`;
+
+          const gmUrl = `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`;
+          const gmResp = await fetch(gmUrl, { 
+            method: 'POST', 
+            headers: { 'Content-Type': 'application/json' }, 
+            body: JSON.stringify({ prompt: { text: evalPrompt } }) 
+          });
+          const gmData = await gmResp.json();
+          
+          console.log('[DEBUG] Gemini evaluation response:', gmData);
+          
+          if (gmData && gmData.candidates && gmData.candidates[0] && gmData.candidates[0].content) {
+            feedback = gmData.candidates[0].content.trim();
+          } else if (gmData && gmData.output && Array.isArray(gmData.output)) {
+            const outParts: string[] = [];
+            for (const o of gmData.output) {
+              try { if (o && o.content) outParts.push(o.content); } catch {}
             }
-          } catch (e) {
-            console.error('Gemini feedback error', e);
+            feedback = outParts.join('').trim();
+          }
+          
+          // Clean up the response to ensure it's just an emoji
+          const emojiMatch = feedback?.match(/[✅❌❓]/);
+          if (emojiMatch) {
+            feedback = emojiMatch[0];
+          }
+          
+          console.log('[DEBUG] Final feedback:', feedback);
+          
+          return NextResponse.json({ 
+            ok: true, 
+            transcript: statement, 
+            cleaned: statement, 
+            feedback 
+          }, { status: 200 });
+        } else {
+          // Original transcript cleaning logic
+          const prompt = `Clean and normalize the following transcript for readability. Requirements:\n- Merge short broken lines into coherent sentences where appropriate.\n- Remove obvious repeated words or stutters (e.g., "hello hello" -> "hello").\n- Trim leading/trailing whitespace and collapse excessive internal spaces.\n- Capitalize sentence starts and add punctuation at sentence ends.\n- Preserve the original meaning; do not invent facts.\n\nReturn only the cleaned transcript as plain text (no lists, no metadata):\n\n${providedTranscript.trim()}`;
+          const gmUrl = `https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`;
+          const gmResp = await fetch(gmUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: { text: prompt } }) });
+          const gmData = await gmResp.json();
+          
+          if (gmData && gmData.candidates && gmData.candidates[0] && gmData.candidates[0].content) {
+            cleaned = gmData.candidates[0].content;
+          } else if (gmData && gmData.output && Array.isArray(gmData.output)) {
+            const outParts: string[] = [];
+            for (const o of gmData.output) {
+              try { if (o && o.content) outParts.push(o.content); } catch {}
+            }
+            cleaned = outParts.join('\n');
+          }
+          
+          // Optionally generate a short feedback sentence about the cleaned transcript
+          if (wantFeedback && cleaned) {
+            try {
+              const fbPrompt = `Provide a one-sentence, neutral feedback about the following cleaned transcript. Be concise and informative (for example, "This is a clear request" or "Consider adding more detail"). Return only the feedback sentence with no extra text:\n\n${cleaned}`;
+              const fbResp = await fetch(`https://generativelanguage.googleapis.com/v1beta2/models/text-bison-001:generateText?key=${geminiKey}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt: { text: fbPrompt } }) });
+              const fbData = await fbResp.json();
+              if (fbData && fbData.candidates && fbData.candidates[0] && fbData.candidates[0].content) {
+                feedback = fbData.candidates[0].content;
+              } else if (fbData && fbData.output && Array.isArray(fbData.output)) {
+                const parts: string[] = [];
+                for (const o of fbData.output) {
+                  try { if (o && o.content) parts.push(o.content); } catch {}
+                }
+                feedback = parts.join(' ');
+              }
+            } catch (e) {
+              console.error('Gemini feedback error', e);
+            }
           }
         }
 
@@ -105,8 +162,8 @@ export async function POST(request: Request) {
     } catch {}
 
     // If we have a transcript, call Gemini text model to clean/punctuate it for better readability
-  let cleaned = null;
-  let feedback = null;
+    let cleaned = null;
+    let feedback = null;
     try {
       if (plainTranscript && plainTranscript.trim()) {
         const geminiKey = process.env.GOOGLE_GEMINI_API_KEY;

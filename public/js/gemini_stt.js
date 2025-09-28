@@ -13,76 +13,59 @@ let finalSegments = [];
 let recordingStartTime = null;
 let segmentTimestamps = []; // Store timestamps for each segment
 
-// Enhanced function to get AI response for transcript snippets
+// Simple function to get AI response - just ask Gemini directly
 async function getAiResponse(transcript) {
   try {
+    console.log('[DEBUG] Getting AI response for:', transcript);
+    
+    // Simple, direct prompt for Gemini
+    const prompt = `"${transcript}"
+
+Is this statement true or false? Respond with only one emoji:
+✅ if it's TRUE or you AGREE
+❌ if it's FALSE or you DISAGREE  
+❓ if you're UNSURE or it's subjective
+
+Just the emoji.`;
+
+    console.log('[DEBUG] Sending to server...');
+    
     const response = await fetch('/api/speech/recognize', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
-        transcript, 
+        transcript: prompt,
         feedback: true,
-        responseType: 'simple' // Signal we want simple emoji responses
+        responseType: 'truth_evaluation'
       })
     });
     const data = await response.json();
     
-    // If server provides a simple response, use it
+    console.log('[DEBUG] Server response:', data);
+    
+    // If server provides a response, extract emoji
     if (data && data.feedback) {
-      return data.feedback;
+      console.log('[DEBUG] Server feedback:', data.feedback);
+      const emoji = extractEmoji(data.feedback);
+      if (emoji) {
+        console.log('[DEBUG] Extracted emoji:', emoji);
+        return emoji;
+      }
     }
     
-    // Fallback: client-side simple AI logic
-    return generateSimpleResponse(transcript);
+    // If Gemini didn't work, just default to ❓
+    console.log('[DEBUG] No valid response, defaulting to ❓');
+    return '❓';
   } catch (error) {
-    console.error('AI response error:', error);
-    return generateSimpleResponse(transcript);
+    console.error('[DEBUG] AI response error:', error);
+    return '❓';
   }
 }
 
-// Simple client-side AI response logic
-function generateSimpleResponse(text) {
-  if (!text || !text.trim()) return '❓';
-  
-  const lowerText = text.toLowerCase().trim();
-  
-  // Agreement indicators
-  const agreeWords = ['yes', 'yeah', 'correct', 'right', 'true', 'agree', 'absolutely', 'definitely', 'sure', 'good', 'great', 'perfect', 'exactly'];
-  const agreePatterns = ['i think', 'i believe', 'we should', 'let\'s do', 'that works', 'sounds good'];
-  
-  // Disagreement indicators
-  const disagreeWords = ['no', 'wrong', 'false', 'disagree', 'never', 'bad', 'terrible', 'awful', 'hate'];
-  const disagreePatterns = ['i don\'t', 'we shouldn\'t', 'that\'s wrong', 'not good', 'don\'t like'];
-  
-  // Question indicators
-  const questionWords = ['what', 'how', 'why', 'when', 'where', 'which', 'who'];
-  const isQuestion = lowerText.includes('?') || questionWords.some(word => lowerText.startsWith(word));
-  
-  // Check for questions first
-  if (isQuestion) {
-    return '❓';
-  }
-  
-  // Check for agreement
-  if (agreeWords.some(word => lowerText.includes(word)) || 
-      agreePatterns.some(pattern => lowerText.includes(pattern))) {
-    return '✅';
-  }
-  
-  // Check for disagreement
-  if (disagreeWords.some(word => lowerText.includes(word)) || 
-      disagreePatterns.some(pattern => lowerText.includes(pattern))) {
-    return '❌';
-  }
-  
-  // Check for statements that might be facts or neutral information
-  const factWords = ['is', 'are', 'was', 'were', 'has', 'have', 'will', 'can', 'could', 'might'];
-  if (factWords.some(word => lowerText.includes(word))) {
-    return '❓';
-  }
-  
-  // Default for unclear statements
-  return '❓';
+// Extract emoji from AI response text
+function extractEmoji(text) {
+  const emojiMatch = text.match(/[✅❌❓]/);
+  return emojiMatch ? emojiMatch[0] : null;
 }
 
 // transcript: string
@@ -94,7 +77,7 @@ async function handleProvidedTranscript(transcript, opts = { appendHistory: true
     // Get AI response for this transcript
     const aiResponse = await getAiResponse(transcript);
     
-    // Post JSON with transcript to the same endpoint used for audio uploads
+    // Post JSON with transcript to the same endpoint used for audio uploads (for cleaning)
     const resp = await fetch('/api/speech/recognize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, feedback: true }) });
     const data = await resp.json();
     console.debug('[AI] sent transcript:', transcript);
