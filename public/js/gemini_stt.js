@@ -13,38 +13,115 @@ let finalSegments = [];
 let recordingStartTime = null;
 let segmentTimestamps = []; // Store timestamps for each segment
 
+// Enhanced function to get AI response for transcript snippets
+async function getAiResponse(transcript) {
+  try {
+    const response = await fetch('/api/speech/recognize', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ 
+        transcript, 
+        feedback: true,
+        responseType: 'simple' // Signal we want simple emoji responses
+      })
+    });
+    const data = await response.json();
+    
+    // If server provides a simple response, use it
+    if (data && data.feedback) {
+      return data.feedback;
+    }
+    
+    // Fallback: client-side simple AI logic
+    return generateSimpleResponse(transcript);
+  } catch (error) {
+    console.error('AI response error:', error);
+    return generateSimpleResponse(transcript);
+  }
+}
+
+// Simple client-side AI response logic
+function generateSimpleResponse(text) {
+  if (!text || !text.trim()) return '❓';
+  
+  const lowerText = text.toLowerCase().trim();
+  
+  // Agreement indicators
+  const agreeWords = ['yes', 'yeah', 'correct', 'right', 'true', 'agree', 'absolutely', 'definitely', 'sure', 'good', 'great', 'perfect', 'exactly'];
+  const agreePatterns = ['i think', 'i believe', 'we should', 'let\'s do', 'that works', 'sounds good'];
+  
+  // Disagreement indicators
+  const disagreeWords = ['no', 'wrong', 'false', 'disagree', 'never', 'bad', 'terrible', 'awful', 'hate'];
+  const disagreePatterns = ['i don\'t', 'we shouldn\'t', 'that\'s wrong', 'not good', 'don\'t like'];
+  
+  // Question indicators
+  const questionWords = ['what', 'how', 'why', 'when', 'where', 'which', 'who'];
+  const isQuestion = lowerText.includes('?') || questionWords.some(word => lowerText.startsWith(word));
+  
+  // Check for questions first
+  if (isQuestion) {
+    return '❓';
+  }
+  
+  // Check for agreement
+  if (agreeWords.some(word => lowerText.includes(word)) || 
+      agreePatterns.some(pattern => lowerText.includes(pattern))) {
+    return '✅';
+  }
+  
+  // Check for disagreement
+  if (disagreeWords.some(word => lowerText.includes(word)) || 
+      disagreePatterns.some(pattern => lowerText.includes(pattern))) {
+    return '❌';
+  }
+  
+  // Check for statements that might be facts or neutral information
+  const factWords = ['is', 'are', 'was', 'were', 'has', 'have', 'will', 'can', 'could', 'might'];
+  if (factWords.some(word => lowerText.includes(word))) {
+    return '❓';
+  }
+  
+  // Default for unclear statements
+  return '❓';
+}
+
 // transcript: string
 // opts.appendHistory: boolean (default true) - whether this function should append to aiHistory
 async function handleProvidedTranscript(transcript, opts = { appendHistory: true }) {
   if (!transcript || !transcript.trim()) return;
   setAiLoading(true);
   try {
+    // Get AI response for this transcript
+    const aiResponse = await getAiResponse(transcript);
+    
     // Post JSON with transcript to the same endpoint used for audio uploads
     const resp = await fetch('/api/speech/recognize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, feedback: true }) });
     const data = await resp.json();
     console.debug('[AI] sent transcript:', transcript);
     console.debug('[AI] response:', data);
+    console.debug('[AI] emoji response:', aiResponse);
+    
     // Don't overwrite the server final result during live transcript calls.
     // Append live AI comments (cleaned text) to history so they persist with timestamps.
     if (opts.appendHistory) {
       if (data && data.cleaned) {
-        appendAiHistory({ text: data.cleaned, source: 'browser', feedback: data.feedback || 'I processed that' });
+        appendAiHistory({ text: data.cleaned, source: 'browser', feedback: `${aiResponse} I processed that` });
       } else if (data && data.transcript) {
         // Some server responses may include the normalized transcript under `transcript`.
-        appendAiHistory({ text: data.transcript, source: 'browser', feedback: data.feedback || 'I processed that' });
+        appendAiHistory({ text: data.transcript, source: 'browser', feedback: `${aiResponse} I processed that` });
       } else if (data && data.error) {
-        appendAiHistory({ text: 'AI cleanup error: ' + (data.error || 'unknown'), source: 'browser' });
+        appendAiHistory({ text: 'AI cleanup error: ' + (data.error || 'unknown'), source: 'browser', feedback: '❓' });
       } else {
         // Fallback: append the raw provided transcript so the user sees something live
-        appendAiHistory({ text: transcript.trim(), source: 'browser', feedback: data && data.feedback ? data.feedback : 'I processed that' });
+        appendAiHistory({ text: transcript.trim(), source: 'browser', feedback: `${aiResponse} I processed that` });
       }
     }
     
-    return data;
+    return { ...data, aiResponse };
   } catch (e) {
     console.error('handleProvidedTranscript failed', e);
-    appendAiHistory({ text: 'AI request failed', source: 'browser' });
-    return { error: String(e) };
+    appendAiHistory({ text: 'AI request failed', source: 'browser', feedback: '❌' });
+    return { error: String(e), aiResponse: '❌' };
   } finally {
     setAiLoading(false);
   }
@@ -178,7 +255,7 @@ function appendAiHistory({ text, source, feedback }) {
   li.dataset.text = text;
 
   const time = new Date().toLocaleTimeString();
-  const fb = feedback ? escapeHtml(feedback) : 'I processed that';
+  const fb = feedback ? escapeHtml(feedback) : '❓ I processed that';
   li.innerHTML = `<div style="font-size:12px;color:#444;margin-bottom:6px"><strong style="font-size:13px">${escapeHtml(text)}</strong></div><div style="font-size:11px;color:#666;margin-bottom:6px">${time} • ${source}</div><div style="font-size:11px;color:#2b6cb0">${fb}</div>`;
   // Insert at top
   aiHistoryEl.insertBefore(li, aiHistoryEl.firstChild);
@@ -196,7 +273,7 @@ function insertPendingAiItem({ text, source }) {
   aiHistoryEl.insertBefore(placeholder, aiHistoryEl.firstChild);
   return (finalText, feedback) => {
     try {
-      placeholder.innerHTML = `<div style="font-size:12px;color:#444;margin-bottom:6px"><strong style="font-size:13px">${escapeHtml(finalText)}</strong></div><div style="font-size:11px;color:#666;margin-bottom:6px">${time} • ${source}</div><div style="font-size:11px;color:#2b6cb0">${escapeHtml(feedback || 'I processed that')}</div>`;
+      placeholder.innerHTML = `<div style="font-size:12px;color:#444;margin-bottom:6px"><strong style="font-size:13px">${escapeHtml(finalText)}</strong></div><div style="font-size:11px;color:#666;margin-bottom:6px">${time} • ${source}</div><div style="font-size:11px;color:#2b6cb0">${escapeHtml(feedback || '❓ I processed that')}</div>`;
       placeholder.dataset.text = finalText;
     } catch { /* swallow */ }
   };
@@ -260,9 +337,10 @@ recordBtn.addEventListener('click', async () => {
               const replace = insertPendingAiItem({ text: r, source: 'browser' });
               debouncedHandle(r, { appendHistory: false }).then((resp) => {
                 try {
-                  if (resp && resp.cleaned) replace(resp.cleaned, resp.feedback || 'I processed that');
-                  else if (resp && resp.transcript) replace(resp.transcript, resp.feedback || 'I processed that');
-                  else replace(r, 'I processed that');
+                  const aiEmoji = resp && resp.aiResponse ? resp.aiResponse : '❓';
+                  if (resp && resp.cleaned) replace(resp.cleaned, `${aiEmoji} I processed that`);
+                  else if (resp && resp.transcript) replace(resp.transcript, `${aiEmoji} I processed that`);
+                  else replace(r, `${aiEmoji} I processed that`);
                 } catch (err) { void err; }
               }).catch(() => {});
             } catch (err) { console.error('debouncedHandle error', err); }
@@ -339,7 +417,7 @@ stopBtn.addEventListener('click', async () => {
         serverResult.textContent = polished;
         console.log('Polished browser transcript for final result:', polished);
         console.log('Segment timestamps used:', segmentTimestamps);
-        appendAiHistory({ text: polished, source: 'browser-polished', feedback: 'Polished from browser transcript' });
+        appendAiHistory({ text: polished, source: 'browser-polished', feedback: '✅ Polished from browser transcript' });
         statusEl.textContent = 'Idle';
         setAiLoading(false);
         
@@ -371,10 +449,10 @@ stopBtn.addEventListener('click', async () => {
             const polished = polishText(finalText);
             serverResult.textContent = polished;
             console.log('Fallback: Polished browser transcript:', polished);
-            appendAiHistory({ text: polished, source: 'browser-fallback', feedback: 'Used browser transcript due to server API issues' });
+            appendAiHistory({ text: polished, source: 'browser-fallback', feedback: '❓ Used browser transcript due to server API issues' });
           } else {
             serverResult.textContent = 'Server API error - Google Speech-to-Text disabled. Please enable it or configure Gemini-only transcription.';
-            appendAiHistory({ text: 'Server API configuration needed', source: 'error', feedback: 'Google Speech API is disabled' });
+            appendAiHistory({ text: 'Server API configuration needed', source: 'error', feedback: '❌ Google Speech API is disabled' });
           }
         }
         // Handle normal successful server response
@@ -383,13 +461,13 @@ stopBtn.addEventListener('click', async () => {
             const polished = polishText(json.cleaned);
             serverResult.textContent = polished;
             console.log('Polished cleaned result (audio):', polished);
-            appendAiHistory({ text: polished, source: 'audio', feedback: 'I processed that' });
+            appendAiHistory({ text: polished, source: 'audio', feedback: '✅ I processed that' });
         } else if (json && json.transcript && json.transcript.trim()) {
             console.log('Found json.transcript for audio:', json.transcript);
             const polished = polishText(json.transcript);
             serverResult.textContent = polished;
             console.log('Polished transcript result (audio):', polished);
-            appendAiHistory({ text: polished, source: 'audio', feedback: 'I processed that' });
+            appendAiHistory({ text: polished, source: 'audio', feedback: '✅ I processed that' });
         } else {
             console.log('No recognized fields for audio, showing raw JSON');
             serverResult.textContent = JSON.stringify(json, null, 2);
@@ -405,9 +483,9 @@ stopBtn.addEventListener('click', async () => {
           const polished = polishText(finalText);
           serverResult.textContent = polished;
           console.log('Upload error fallback: Polished browser transcript:', polished);
-          appendAiHistory({ text: polished, source: 'browser-error-fallback', feedback: 'Used browser transcript due to upload error' });
+          appendAiHistory({ text: polished, source: 'browser-error-fallback', feedback: '❌ Used browser transcript due to upload error' });
         } else {
-          appendAiHistory({ text: 'Upload error', source: 'audio' });
+          appendAiHistory({ text: 'Upload error', source: 'audio', feedback: '❌' });
         }
       } finally {
         setAiLoading(false);
