@@ -40,6 +40,12 @@ export default function AIChat() {
   const [roleChecklists, setRoleChecklists] = useState<{ [role: string]: { items: string[]; checked: boolean[]; notes: string[] } }>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+  // Live transcription state (for Audit tab)
+  const [recording, setRecording] = useState(false);
+  const [interimText, setInterimText] = useState("");
+  const [finalSegments, setFinalSegments] = useState<string[]>([]);
+  const recognitionRef = useRef<any>(null);
+
   // Handle file upload in General Chat (text files only)
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -404,56 +410,159 @@ export default function AIChat() {
             </>
           )}
           {activeTab === 'audit' && roles.length > 0 && (
-            <div style={{ padding: 24, minHeight: 0, height: '100%', overflowY: 'auto' }}>
-              <h2 style={{ marginBottom: 18, color: '#2563eb', fontSize: 22, fontWeight: 700 }}>Audit Checklist: {roles[activeRoleIdx]}</h2>
-              {roleChecklists[roles[activeRoleIdx]] && (
-                <ul style={{ listStyle: 'none', padding: 0, marginBottom: 24 }}>
-                  {roleChecklists[roles[activeRoleIdx]].items.map((item, idx) => (
-                    <li key={idx} style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
-                      <input
-                        type="checkbox"
-                        checked={roleChecklists[roles[activeRoleIdx]].checked[idx]}
-                        onChange={e => {
-                          setRoleChecklists(prev => {
-                            const updated = { ...prev };
-                            updated[roles[activeRoleIdx]].checked[idx] = e.target.checked;
-                            return { ...updated };
-                          });
-                        }}
-                        style={{ marginRight: 10 }}
-                      />
-                      <span style={{ flex: 1 }}>{item}</span>
-                      <input
-                        type="text"
-                        placeholder="Paste transcript or notes..."
-                        value={roleChecklists[roles[activeRoleIdx]].notes[idx]}
-                        onChange={e => {
-                          setRoleChecklists(prev => {
-                            const updated = { ...prev };
-                            updated[roles[activeRoleIdx]].notes[idx] = e.target.value;
-                            return { ...updated };
-                          });
-                        }}
-                        style={{ marginLeft: 10, flex: 2, padding: '4px 8px', borderRadius: 4, border: '1px solid #ccc' }}
-                      />
-                      <button
-                        style={{ marginLeft: 8, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}
-                        onClick={() => {
-                          // Here you could call the AI to scan the text and check off if appropriate
-                          // For now, just simulate checking off if text is present
-                          setRoleChecklists(prev => {
-                            const updated = { ...prev };
-                            if (updated[roles[activeRoleIdx]].notes[idx].trim()) {
-                              updated[roles[activeRoleIdx]].checked[idx] = true;
+            <div style={{ display: 'flex', gap: 18, padding: 24, minHeight: 0, height: '100%' }}>
+              {/* Left: checklist */}
+              <div style={{ flex: 1, minWidth: 420, overflowY: 'auto' }}>
+                <h2 style={{ marginBottom: 18, color: '#2563eb', fontSize: 22, fontWeight: 700 }}>Audit Checklist: {roles[activeRoleIdx]}</h2>
+                {roleChecklists[roles[activeRoleIdx]] && (
+                  <ul style={{ listStyle: 'none', padding: 0, marginBottom: 24 }}>
+                    {roleChecklists[roles[activeRoleIdx]].items.map((item, idx) => (
+                      <li key={idx} style={{ display: 'flex', alignItems: 'center', marginBottom: 10 }}>
+                        <input
+                          type="checkbox"
+                          checked={roleChecklists[roles[activeRoleIdx]].checked[idx]}
+                          onChange={e => {
+                            setRoleChecklists(prev => {
+                              const updated = { ...prev };
+                              updated[roles[activeRoleIdx]].checked[idx] = e.target.checked;
+                              return { ...updated };
+                            });
+                          }}
+                          style={{ marginRight: 10 }}
+                        />
+                        <span style={{ flex: 1 }}>{item}</span>
+                        <input
+                          type="text"
+                          placeholder="Paste transcript or notes..."
+                          value={roleChecklists[roles[activeRoleIdx]].notes[idx]}
+                          onChange={e => {
+                            setRoleChecklists(prev => {
+                              const updated = { ...prev };
+                              updated[roles[activeRoleIdx]].notes[idx] = e.target.value;
+                              return { ...updated };
+                            });
+                          }}
+                          style={{ marginLeft: 10, flex: 2, padding: '4px 8px', borderRadius: 4, border: '1px solid #ccc' }}
+                        />
+                        <button
+                          style={{ marginLeft: 8, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}
+                          onClick={() => {
+                            setRoleChecklists(prev => {
+                              const updated = { ...prev };
+                              if (updated[roles[activeRoleIdx]].notes[idx].trim()) {
+                                updated[roles[activeRoleIdx]].checked[idx] = true;
+                              }
+                              return { ...updated };
+                            });
+                          }}
+                        >Scan</button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+
+              {/* Right: live transcript pane */}
+              <div style={{ width: 420, borderLeft: '1px solid #e6e6e6', paddingLeft: 18, display: 'flex', flexDirection: 'column' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+                  <h3 style={{ margin: 0, color: '#111', fontSize: 18 }}>Live Transcript</h3>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <button
+                      onClick={async () => {
+                        // Start speech recognition
+                        if (recording) return;
+                        const SR = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+                        if (!SR) {
+                          alert('SpeechRecognition not supported in this browser.');
+                          return;
+                        }
+                        try {
+                          const recog = new SR();
+                          recog.lang = 'en-US';
+                          recog.interimResults = true;
+                          recog.continuous = true;
+                          recog.onresult = (ev: any) => {
+                            let interim = '';
+                            for (let i = ev.resultIndex; i < ev.results.length; i++) {
+                              const res = ev.results[i];
+                              if (res.isFinal) {
+                                const txt = res[0].transcript.trim();
+                                setFinalSegments(prev => [...prev, txt]);
+                              } else {
+                                interim += res[0].transcript;
+                              }
                             }
-                            return { ...updated };
-                          });
-                        }}
-                      >Scan</button>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                            setInterimText(interim);
+                          };
+                          recog.onerror = (e: any) => {
+                            console.error('Recognition error', e);
+                            setRecording(false);
+                          };
+                          recog.onend = () => {
+                            // recognition may end unexpectedly; ensure state is correct
+                            setRecording(false);
+                            setInterimText('');
+                          };
+                          recognitionRef.current = recog;
+                          recog.start();
+                          setRecording(true);
+                        } catch (e) {
+                          console.error('Failed to start recognition', e);
+                          alert('Failed to start speech recognition.');
+                        }
+                      }}
+                      style={{ background: recording ? '#ef4444' : '#10b981', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}
+                    >{recording ? 'Recording...' : 'Record'}</button>
+
+                    <button
+                      onClick={() => {
+                        if (!recording) return;
+                        try {
+                          const recog = recognitionRef.current;
+                          if (recog && typeof recog.stop === 'function') recog.stop();
+                        } catch (e) {
+                          console.error('Error stopping recognition', e);
+                        }
+                        setRecording(false);
+                        setInterimText('');
+                      }}
+                      style={{ background: '#374151', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}
+                    >Stop</button>
+                  </div>
+                </div>
+
+                <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', border: '1px solid #eee', borderRadius: 8, padding: 12, background: '#fff' }}>
+                  {finalSegments.length === 0 && !interimText && (
+                    <div style={{ color: '#666' }}>No transcript yet. Click Record to begin live transcription.</div>
+                  )}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {finalSegments.map((seg, idx) => (
+                      <div key={idx} style={{ padding: 8, borderRadius: 6, background: '#f8fafc', border: '1px solid #eef2ff' }}>
+                        <div style={{ fontSize: 12, color: '#6b7280', marginBottom: 6 }}>{new Date().toLocaleTimeString()}</div>
+                        <div style={{ fontSize: 14 }}>{seg}</div>
+                      </div>
+                    ))}
+                    {interimText && (
+                      <div style={{ padding: 8, borderRadius: 6, background: '#fff7ed', border: '1px dashed #f59e0b' }}>
+                        <div style={{ fontSize: 12, color: '#92400e', marginBottom: 6 }}>Listening…</div>
+                        <div style={{ fontSize: 14, color: '#92400e' }}>{interimText}</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div style={{ marginTop: 10, display: 'flex', gap: 8 }}>
+                  <button onClick={() => { setFinalSegments([]); setInterimText(''); }} style={{ background: '#ef4444', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>Clear</button>
+                  <button onClick={() => {
+                    // copy full transcript to clipboard
+                    const text = [...finalSegments, interimText].filter(Boolean).join('\n');
+                    if (!text) return;
+                    navigator.clipboard.writeText(text).then(() => {
+                      alert('Transcript copied to clipboard');
+                    }).catch(() => alert('Failed to copy'));
+                  }} style={{ background: '#2563eb', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}>Copy</button>
+                </div>
+              </div>
             </div>
           )}
         </div>
