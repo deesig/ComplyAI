@@ -10,27 +10,36 @@ let mediaRecorder = null;
 let chunks = [];
 let recognition = null;
 let finalSegments = [];
+let recordingStartTime = null;
+let segmentTimestamps = []; // Store timestamps for each segment
 
-// transcript:string, opts.appendHistory:boolean
+// transcript: string
+// opts.appendHistory: boolean (default true) - whether this function should append to aiHistory
 async function handleProvidedTranscript(transcript, opts = { appendHistory: true }) {
   if (!transcript || !transcript.trim()) return;
   setAiLoading(true);
   try {
-  const resp = await fetch('/api/speech/recognize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, feedback: true }) });
+    // Post JSON with transcript to the same endpoint used for audio uploads
+    const resp = await fetch('/api/speech/recognize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ transcript, feedback: true }) });
     const data = await resp.json();
     console.debug('[AI] sent transcript:', transcript);
     console.debug('[AI] response:', data);
+    // Don't overwrite the server final result during live transcript calls.
+    // Append live AI comments (cleaned text) to history so they persist with timestamps.
     if (opts.appendHistory) {
       if (data && data.cleaned) {
         appendAiHistory({ text: data.cleaned, source: 'browser', feedback: data.feedback || 'I processed that' });
       } else if (data && data.transcript) {
+        // Some server responses may include the normalized transcript under `transcript`.
         appendAiHistory({ text: data.transcript, source: 'browser', feedback: data.feedback || 'I processed that' });
       } else if (data && data.error) {
         appendAiHistory({ text: 'AI cleanup error: ' + (data.error || 'unknown'), source: 'browser' });
       } else {
-        appendAiHistory({ text: transcript.trim(), source: 'browser' });
+        // Fallback: append the raw provided transcript so the user sees something live
+        appendAiHistory({ text: transcript.trim(), source: 'browser', feedback: data && data.feedback ? data.feedback : 'I processed that' });
       }
     }
+    
     return data;
   } catch (e) {
     console.error('handleProvidedTranscript failed', e);
@@ -104,8 +113,62 @@ function setAiLoading(on) {
   aiLoadingEl.style.display = on ? 'inline' : 'none';
 }
 
-function appendAiHistory({ text, source }) {
+// Convert milliseconds to relative timestamp format (00:00:00)
+function msToTimestamp(ms) {
+  const totalSeconds = Math.floor(ms / 1000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+}
+
+// Enhanced helper to polish transcript text with real timestamps from segments
+function polishText(s) {
+    if (!s) return s;
+    
+    // Process input per-line to preserve intended breaks
+    const lines = String(s).replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean);
+    
+    const processed = lines.map((line, index) => {
+        // Collapse multiple spaces
+        let t = line.replace(/\s+/g, ' ').trim();
+        
+        // Remove repeated adjacent words (e.g., "hello hello" -> "hello")
+        try {
+            t = t.replace(/\b(\w+)\s+\1\b/gi, '$1');
+        } catch {}
+        
+        // Capitalize first character and ensure proper punctuation
+        if (t.length > 0) {
+            t = t.charAt(0).toUpperCase() + t.slice(1);
+            
+            // Add period if the sentence doesn't end with punctuation
+            if (!/[.!?]$/.test(t)) {
+                t = t + '.';
+            }
+        }
+        
+        // Use actual timestamp from segmentTimestamps if available, otherwise calculate relative time
+        let timestamp = '00:00:00';
+        if (segmentTimestamps[index]) {
+            const elapsedMs = segmentTimestamps[index] - recordingStartTime;
+            timestamp = msToTimestamp(elapsedMs);
+        } else if (recordingStartTime) {
+            // Fallback: estimate based on line position (2 seconds per line)
+            const estimatedMs = index * 2000;
+            timestamp = msToTimestamp(estimatedMs);
+        }
+        
+        return `[${timestamp}] ${t}`;
+    });
+    
+    // Join with newlines to preserve line breaks
+    return processed.join('\n');
+}
+
+function appendAiHistory({ text, source, feedback }) {
   if (!aiHistoryEl) return;
+  // Avoid duplicate consecutive entries
   const first = aiHistoryEl.firstElementChild;
   if (first && first.dataset && first.dataset.text === text) return;
 
@@ -115,7 +178,9 @@ function appendAiHistory({ text, source }) {
   li.dataset.text = text;
 
   const time = new Date().toLocaleTimeString();
-  li.innerHTML = `<div style="font-size:12px;color:#444;margin-bottom:6px"><strong style="font-size:13px">${escapeHtml(text)}</strong></div><div style="font-size:11px;color:#666">${time} • ${source}</div>`;
+  const fb = feedback ? escapeHtml(feedback) : 'I processed that';
+  li.innerHTML = `<div style="font-size:12px;color:#444;margin-bottom:6px"><strong style="font-size:13px">${escapeHtml(text)}</strong></div><div style="font-size:11px;color:#666;margin-bottom:6px">${time} • ${source}</div><div style="font-size:11px;color:#2b6cb0">${fb}</div>`;
+  // Insert at top
   aiHistoryEl.insertBefore(li, aiHistoryEl.firstChild);
 }
 
@@ -133,7 +198,7 @@ function insertPendingAiItem({ text, source }) {
     try {
       placeholder.innerHTML = `<div style="font-size:12px;color:#444;margin-bottom:6px"><strong style="font-size:13px">${escapeHtml(finalText)}</strong></div><div style="font-size:11px;color:#666;margin-bottom:6px">${time} • ${source}</div><div style="font-size:11px;color:#2b6cb0">${escapeHtml(feedback || 'I processed that')}</div>`;
       placeholder.dataset.text = finalText;
-    } catch (e) { void e; }
+    } catch { /* swallow */ }
   };
 }
 
@@ -141,25 +206,20 @@ function escapeHtml(s) {
   return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
-// Small helper to polish plain transcript text for punctuation/capitalization
-function polishText(s) {
-  if (!s) return s;
-  // Process input per-line to preserve intended breaks while trimming leading spaces
-  const lines = String(s).replace(/\r/g, '').split(/\n/).map(l => l.trim()).filter(Boolean);
-  const processed = lines.map(line => {
-    // collapse multiple spaces
-    let t = line.replace(/\s+/g, ' ').trim();
-    // remove repeated adjacent words (e.g., "hello hello")
-    try { t = t.replace(/\b(\w+)(?:\s+\1\b)+/gi, '$1'); } catch {}
-    // Capitalize first char and ensure punctuation
-    t = t.charAt(0).toUpperCase() + t.slice(1);
-    if (!/[.!?]$/.test(t)) t = t + '.';
-    return t;
-  });
-  return processed.join('\n');
+// Helper function to convert array buffer to base64
+function arrayBufferToBase64(buffer) {
+  let binary = '';
+  const bytes = new Uint8Array(buffer);
+  const len = bytes.byteLength;
+  for (let i = 0; i < len; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return window.btoa(binary);
 }
 
 recordBtn.addEventListener('click', async () => {
+  recordingStartTime = Date.now(); // Capture when recording starts in milliseconds
+  segmentTimestamps = []; // Reset segment timestamps
   serverResult.textContent = '';
   transcriptEl.textContent = '';
   statusEl.textContent = 'Requesting microphone...';
@@ -167,15 +227,18 @@ recordBtn.addEventListener('click', async () => {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
+    // Setup MediaRecorder to capture audio for server-side STT
     mediaRecorder = new MediaRecorder(stream);
     chunks = [];
-  // reset finalSegments so a new recording does not append to previous
-  finalSegments = [];
-  setAiLoading(false);
-  serverResult.textContent = '';
+    // reset finalSegments so a new recording does not append to previous
+    finalSegments = [];
+    // clear AI loading and server result UI
+    setAiLoading(false);
+    serverResult.textContent = '';
     mediaRecorder.ondataavailable = (e) => chunks.push(e.data);
     mediaRecorder.start();
 
+    // Setup browser SpeechRecognition for live interim transcript (optional, Chrome)
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (SpeechRecognition) {
       recognition = new SpeechRecognition();
@@ -189,6 +252,9 @@ recordBtn.addEventListener('click', async () => {
           const r = results[i][0].transcript;
           if (results[i].isFinal) {
             finalSegments.push(r);
+            // Capture timestamp when this segment becomes final
+            segmentTimestamps.push(Date.now());
+            
             try {
               console.debug('[AI] queueing debounced send:', r);
               const replace = insertPendingAiItem({ text: r, source: 'browser' });
@@ -231,60 +297,120 @@ stopBtn.addEventListener('click', async () => {
 
   if (mediaRecorder) {
     mediaRecorder.stop();
+
+    // Wait for data to be available
     mediaRecorder.onstop = async () => {
-      // prefer to send final text snippets if present in transcriptEl
+      // Flush any pending debounced transcript. If nothing was flushed, send the finalText directly
       let flushedResult = null;
-      try { flushedResult = await debouncedHandle.flush(); } catch (err) { void err; }
+      try {
+        flushedResult = await debouncedHandle.flush();
+      } catch (err) {
+        void err;
+      }
+
+      // finalText contains the current text of the live browser transcript
       const finalText = transcriptEl.textContent && transcriptEl.textContent.trim() ? transcriptEl.textContent.trim() : '';
+      
+      // If debounced flush didn't return a result and we have finalText, send it now so serverResult is populated
       if (!flushedResult && finalText) {
         try {
-          statusEl.textContent = 'Sending final browser transcript to server...';
           const data = await handleProvidedTranscript(finalText);
           if (data && data.cleaned) {
-            serverResult.textContent = data.cleaned;
+            const polished = polishText(data.cleaned);
+            serverResult.textContent = polished;
+            console.log('Polished cleaned result (no audio):', polished);
           } else if (data && data.transcript) {
-            serverResult.textContent = data.transcript;
+            const polished = polishText(data.transcript);
+            serverResult.textContent = polished;
+            console.log('Polished transcript result (no audio):', polished);
           }
-        } catch (e) {
-          console.error('Upload error', e);
-          statusEl.textContent = 'Upload error';
+        } catch (err) {
+          console.error('Final text upload error', err);
         }
-      } else {
-        const blob = new Blob(chunks, { type: 'audio/webm' });
-        try {
-          statusEl.textContent = 'Uploading audio to server...';
-          // convert blob to base64 and send as JSON since the server expects JSON.audio
-          const arrayBuffer = await blob.arrayBuffer();
-          const base64 = arrayBufferToBase64(arrayBuffer);
-          setAiLoading(true);
-          const resp = await fetch('/api/speech/recognize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio: base64, feedback: true }) });
-          const json = await resp.json();
-          if (json && json.cleaned) {
-            serverResult.textContent = polishText(json.cleaned);
-          } else if (json && json.transcript) {
-            serverResult.textContent = polishText(json.transcript);
+      }
+
+      const blob = new Blob(chunks, { type: 'audio/webm' });
+      
+      // Since the server has issues with Google Speech API, fall back to using the browser transcript
+      // and apply polishing to it for the final result
+      if (finalText) {
+        console.log('Server has Google Speech API issues, using browser transcript:', finalText);
+        const polished = polishText(finalText);
+        serverResult.textContent = polished;
+        console.log('Polished browser transcript for final result:', polished);
+        console.log('Segment timestamps used:', segmentTimestamps);
+        appendAiHistory({ text: polished, source: 'browser-polished', feedback: 'Polished from browser transcript' });
+        statusEl.textContent = 'Idle';
+        setAiLoading(false);
+        
+        recordBtn.disabled = false;
+        stopBtn.disabled = true;
+        mediaRecorder = null;
+        chunks = [];
+        return; // Skip the server upload since it's broken
+      }
+      
+      // Upload blob to server endpoint for Speech-to-Text as base64 JSON
+      // (This will likely fail due to Google Speech API issues, but keeping for completeness)
+      try {
+        statusEl.textContent = 'Uploading audio to server...';
+        const arrayBuffer = await blob.arrayBuffer();
+        const base64 = arrayBufferToBase64(arrayBuffer);
+        setAiLoading(true);
+        
+        console.log('About to fetch audio to server...');
+        const resp = await fetch('/api/speech/recognize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio: base64, feedback: true }) });
+        console.log('Audio upload response status:', resp.status);
+        const json = await resp.json();
+        console.log('Audio server JSON response:', json);
+
+        // Check if server has Google Speech API errors
+        if (json && json.google && json.google.error) {
+          console.log('Google Speech API error detected, falling back to browser transcript');
+          if (finalText) {
+            const polished = polishText(finalText);
+            serverResult.textContent = polished;
+            console.log('Fallback: Polished browser transcript:', polished);
+            appendAiHistory({ text: polished, source: 'browser-fallback', feedback: 'Used browser transcript due to server API issues' });
           } else {
-            serverResult.textContent = JSON.stringify(json, null, 2);
+            serverResult.textContent = 'Server API error - Google Speech-to-Text disabled. Please enable it or configure Gemini-only transcription.';
+            appendAiHistory({ text: 'Server API configuration needed', source: 'error', feedback: 'Google Speech API is disabled' });
           }
-          statusEl.textContent = 'Idle';
-          try {
-            if (json && json.cleaned) {
-              appendAiHistory({ text: json.cleaned, source: 'audio', feedback: 'I processed that' });
-            } else if (json && json.transcript) {
-              appendAiHistory({ text: json.transcript, source: 'audio', feedback: 'I processed that' });
-            } else if (json && json.error) {
-              appendAiHistory({ text: 'AI cleanup error: ' + (json.error || 'unknown'), source: 'audio' });
-            }
-          } catch (err) {
-            console.error('Error updating aiComments from upload response', err);
-          }
-        } catch (e) {
-          console.error('Upload error', e);
-          statusEl.textContent = 'Upload error';
-          appendAiHistory({ text: 'Upload error', source: 'audio' });
-        } finally {
-          setAiLoading(false);
         }
+        // Handle normal successful server response
+        else if (json && json.cleaned && json.cleaned.trim()) {
+            console.log('Found json.cleaned for audio:', json.cleaned);
+            const polished = polishText(json.cleaned);
+            serverResult.textContent = polished;
+            console.log('Polished cleaned result (audio):', polished);
+            appendAiHistory({ text: polished, source: 'audio', feedback: 'I processed that' });
+        } else if (json && json.transcript && json.transcript.trim()) {
+            console.log('Found json.transcript for audio:', json.transcript);
+            const polished = polishText(json.transcript);
+            serverResult.textContent = polished;
+            console.log('Polished transcript result (audio):', polished);
+            appendAiHistory({ text: polished, source: 'audio', feedback: 'I processed that' });
+        } else {
+            console.log('No recognized fields for audio, showing raw JSON');
+            serverResult.textContent = JSON.stringify(json, null, 2);
+        }
+        
+        statusEl.textContent = 'Idle';
+      } catch (e) {
+        console.error('Upload error', e);
+        statusEl.textContent = 'Upload error';
+        
+        // Fallback to browser transcript on upload error
+        if (finalText) {
+          const polished = polishText(finalText);
+          serverResult.textContent = polished;
+          console.log('Upload error fallback: Polished browser transcript:', polished);
+          appendAiHistory({ text: polished, source: 'browser-error-fallback', feedback: 'Used browser transcript due to upload error' });
+        } else {
+          appendAiHistory({ text: 'Upload error', source: 'audio' });
+        }
+      } finally {
+        setAiLoading(false);
       }
 
       recordBtn.disabled = false;
@@ -298,15 +424,3 @@ stopBtn.addEventListener('click', async () => {
     stopBtn.disabled = true;
   }
 });
-
-function arrayBufferToBase64(buffer) {
-  let binary = '';
-  const bytes = new Uint8Array(buffer);
-  const len = bytes.byteLength;
-  const chunk = 0x8000;
-  for (let i = 0; i < len; i += chunk) {
-    const slice = bytes.subarray(i, i + chunk);
-    binary += String.fromCharCode.apply(null, slice);
-  }
-  return btoa(binary);
-}
