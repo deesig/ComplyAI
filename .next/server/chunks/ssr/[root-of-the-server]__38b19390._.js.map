@@ -3,5 +3,5 @@
   "sources": [],
   "sections": [
     {"offset": {"line": 3, "column": 0}, "map": {"version":3,"sources":[],"names":[],"mappings":"","debugId":null}},
-    {"offset": {"line": 15, "column": 0}, "map": {"version":3,"sources":["file:///Users/austintrinh/Library/CloudStorage/GoogleDrive-austinptrinh%40gmail.com/My%20Drive/CS%20Projects/VTHacks13/ComplyAI/src/app/page.tsx"],"sourcesContent":["import { redirect } from 'next/navigation';\n\nexport default function Home() {\n  // Redirect root to the static Gemini STT demo page placed in /public\n  redirect('/gemini_stt.html');\n}\n"],"names":[],"mappings":";;;;AAAA;AAAA;;AAEe,SAAS;IACtB,qEAAqE;IACrE,IAAA,iMAAQ,EAAC;AACX","debugId":null}}]
+    {"offset": {"line": 15, "column": 0}, "map": {"version":3,"sources":["file:///Users/austintrinh/Library/CloudStorage/GoogleDrive-austinptrinh%40gmail.com/My%20Drive/CS%20Projects/VTHacks13/ComplyAI/src/app/page.tsx"],"sourcesContent":["import { redirect } from 'next/navigation';\n\nexport default function Home() {\n  return (\n    <>\n      <AppHeader />\n      <main>\n        <WelcomePage />\n      </main>\n      <AppFooter />\n    </>\n  );\n}\n"],"names":[],"mappings":";;;;;;AAEe,SAAS;IACtB,qBACE;;0BACE,8OAAC;;;;;0BACD,8OAAC;0BACC,cAAA,8OAAC;;;;;;;;;;0BAEH,8OAAC;;;;;;;AAGP","debugId":null}}]
 }
