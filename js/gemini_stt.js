@@ -113,20 +113,34 @@ function setAiLoading(on) {
 
 // Small helper to polish plain transcript text for punctuation/capitalization
 function polishText(s) {
-  if (!s) return s;
-  // Process input per-line to preserve intended breaks while trimming leading spaces
-  const lines = String(s).replace(/\r/g, '').split(/\n/).map(l => l.trim()).filter(Boolean);
-  const processed = lines.map(line => {
-    // collapse multiple spaces
-    let t = line.replace(/\s+/g, ' ').trim();
-    // remove repeated adjacent words (e.g., "hello hello")
-    try { t = t.replace(/\b(\w+)(?:\s+\1\b)+/gi, '$1'); } catch {}
-    // Capitalize first char and ensure punctuation
-    t = t.charAt(0).toUpperCase() + t.slice(1);
-    if (!/[.!?]$/.test(t)) t = t + '.';
-    return t;
-  });
-  return processed.join('\n');
+    if (!s) return s;
+    
+    // Process input per-line to preserve intended breaks while trimming leading spaces
+    const lines = String(s).replace(/\r/g, '').split('\n').map(l => l.trim()).filter(Boolean);
+    
+    const processed = lines.map(line => {
+        // Collapse multiple spaces
+        let t = line.replace(/\s+/g, ' ').trim();
+        
+        // Remove repeated adjacent words (e.g., "hello hello" -> "hello")
+        try {
+            t = t.replace(/\b(\w+)\s+\1\b/gi, '$1');
+        } catch {}
+        
+        // Capitalize first character and ensure proper punctuation
+        if (t.length > 0) {
+            t = t.charAt(0).toUpperCase() + t.slice(1);
+            
+            // Add period if the sentence doesn't end with punctuation
+            if (!/[.!?]$/.test(t)) {
+                t = t + '.';
+            }
+        }
+        
+        return t;
+    });
+    
+    return processed.join(' ');
 }
 
 function appendAiHistory({ text, source, feedback }) {
@@ -262,10 +276,15 @@ stopBtn.addEventListener('click', async () => {
         try {
           const data = await handleProvidedTranscript(finalText);
           if (data && data.cleaned) {
-            serverResult.textContent = data.cleaned;
+            const polished = polishText(data.cleaned);
+            serverResult.textContent = polished;
+            console.log('Polished cleaned result (no audio):', polished);
           } else if (data && data.transcript) {
-            serverResult.textContent = data.transcript;
+            const polished = polishText(data.transcript);
+            serverResult.textContent = polished;
+            console.log('Polished transcript result (no audio):', polished);
           }
+
         } catch (err) {
           console.error('Final text upload error', err);
         }
@@ -281,11 +300,15 @@ stopBtn.addEventListener('click', async () => {
   const resp = await fetch('/api/speech/recognize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ audio: base64, feedback: true }) });
         const json = await resp.json();
         if (json && json.cleaned) {
-          serverResult.textContent = polishText(json.cleaned);
+            const polished = polishText(json.cleaned);
+            serverResult.textContent = polished;
+            console.log('Polished cleaned result:', polished);
         } else if (json && json.transcript) {
-          serverResult.textContent = polishText(json.transcript);
+            const polished = polishText(json.transcript);
+            serverResult.textContent = polished;
+            console.log('Polished transcript result:', polished);
         } else {
-          serverResult.textContent = JSON.stringify(json, null, 2);
+            serverResult.textContent = JSON.stringify(json, null, 2);
         }
         statusEl.textContent = 'Idle';
 
