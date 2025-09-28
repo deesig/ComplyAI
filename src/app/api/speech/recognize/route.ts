@@ -20,6 +20,47 @@ export async function POST(request: Request) {
         let cleaned = null;
         let feedback = null;
 
+        if (responseType === 'validate_checklist') {
+          // Expect body.checklistItems: string[]
+          const checklistItems: string[] = Array.isArray(body?.checklistItems) ? body.checklistItems : [];
+          console.log('[DEBUG] validate_checklist: items count=', checklistItems.length);
+
+          const prompt = `You are an assistant that compares a meeting transcript to a checklist.\n\nTranscript:\n"""\n${providedTranscript}\n"""\n\nChecklist items:\n${checklistItems.map((it, i) => `${i + 1}. ${it}`).join('\n')}\n\nFor each checklist item, decide whether the transcript provides clear evidence that the item is satisfied. Respond ONLY with a single JSON object (no surrounding text) with this exact shape:\n{\n  "results": [ { "item": "<the checklist item>", "emoji": "✅|❌|❓", "note": "a very short (<=50 char) justification or excerpt from the transcript" } ],\n  "cleaned": "<a short cleaned/polished version of the transcript>"\n}\nIf you cannot determine, use the emoji \u2753 for unsure. Keep notes short. Only output valid JSON.`;
+
+          const gmUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${geminiKey}`;
+          const gmResp = await fetch(gmUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.0, maxOutputTokens: 800 }
+            })
+          });
+
+          const gmData = await gmResp.json();
+          console.log('[DEBUG] Gemini response status:', gmResp.status);
+          console.log('[DEBUG] Gemini raw response:', JSON.stringify(gmData, null, 2));
+
+          // Extract the model text
+          const raw = (gmData && gmData.candidates && gmData.candidates[0] && gmData.candidates[0].content && gmData.candidates[0].content.parts && gmData.candidates[0].content.parts[0]) ? gmData.candidates[0].content.parts[0].text : (typeof gmData === 'string' ? gmData : '');
+
+          // Try to extract JSON object from the text
+          try {
+            const jsonMatch = String(raw).match(/\{[\s\S]*\}/);
+            const parsed = jsonMatch ? JSON.parse(jsonMatch[0]) : JSON.parse(String(raw));
+            if (parsed && Array.isArray(parsed.results)) {
+              const cleaned = parsed.cleaned || providedTranscript.trim();
+              return NextResponse.json({ ok: true, transcript: providedTranscript.trim(), cleaned, results: parsed.results }, { status: 200 });
+            }
+          } catch (err) {
+            console.log('[DEBUG] Failed to parse Gemini JSON for validate_checklist:', err);
+          }
+
+          // Fallback: return ? for each item
+          const fallback = checklistItems.map((it: string) => ({ item: it, emoji: '❓', note: 'No parsed response' }));
+          return NextResponse.json({ ok: true, transcript: providedTranscript.trim(), cleaned: providedTranscript.trim(), results: fallback }, { status: 200 });
+        }
+
         if (responseType === 'truth_evaluation' || responseType === 'simple_agreement') {
           const statementMatch = providedTranscript.match(/"([^"]+)"/);
           const statement = statementMatch ? statementMatch[1] : providedTranscript;
@@ -35,10 +76,10 @@ Respond with ONLY one emoji:
 
 Just the emoji, nothing else.`;
 
-          // Use the correct model name - gemini-2.0-flash-exp
-          const gmUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${geminiKey}`;
+          // Use the correct model name - gemini-2.5-flash-exp
+          const gmUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-exp:generateContent?key=${geminiKey}`;
           
-          console.log('[DEBUG] Sending to Gemini with model gemini-2.0-flash-exp');
+          console.log('[DEBUG] Sending to Gemini with model gemini-2.5-flash-exp');
           
           const gmResp = await fetch(gmUrl, { 
             method: 'POST', 

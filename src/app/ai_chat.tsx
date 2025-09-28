@@ -38,6 +38,8 @@ export default function AIChat() {
   const [activeTab, setActiveTab] = useState<'chat' | 'audit'>('chat');
   const [activeRoleIdx, setActiveRoleIdx] = useState(0);
   const [roleChecklists, setRoleChecklists] = useState<{ [role: string]: { items: string[]; checked: boolean[]; notes: string[] } }>({});
+  // Per-role per-item emoji placeholders returned by Gemini (only emoji, no text)
+  const [rolePlaceholders, setRolePlaceholders] = useState<{ [role: string]: string[] }>({});
   const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
   // Live transcription state (for Audit tab)
@@ -144,6 +146,10 @@ export default function AIChat() {
               checked: Array(checklistItems.length).fill(false),
               notes: Array(checklistItems.length).fill("")
             };
+            // initialize placeholders for this role
+            (function() {
+              setRolePlaceholders(prev => ({ ...prev, [role]: Array(checklistItems.length).fill('') }));
+            })();
           } catch {
             // On error, fallback to default
             initial[role] = {
@@ -261,6 +267,94 @@ export default function AIChat() {
       console.error("Fetch error:", error);
       // Remove loading message if error
       setMessages(prev => prev.filter(msg => msg !== loadingMsg));
+    }
+  }
+
+  // Validate checklist items against a transcript using the server's Gemini route
+  async function validateChecklist(fullTranscript: string, roleKey: string) {
+    try {
+      const checklistObj = roleChecklists[roleKey];
+      if (!checklistObj) return;
+      const items = checklistObj.items || [];
+      if (items.length === 0) return;
+
+      const body = { transcript: fullTranscript, checklistItems: items, responseType: 'validate_checklist' } as any;
+      // Provide a prompt override so the server can (optionally) pass this directly to Gemini.
+      // This prompt asks the model to be optimistic and return an aligned emoji per checklist item.
+      body.promptOverride = `You are an assistant that compares a meeting transcript to a checklist. Be optimistic: if the transcript mentions or implies a checklist item even briefly, mark it as satisfied.\n\nTranscript:\n"""\n${fullTranscript}\n"""\n\nChecklist items (in the same order):\n${items.map((it, i) => `${i + 1}. ${it}`).join('\n')}\n\nOutput requirements (IMPORTANT):\n- Respond with ONE valid JSON object and nothing else. No extra commentary, no code fences.\n- The JSON must have exactly this shape:\n  { "results": [ { "emoji": "✅|❌|❓" } ], "cleaned": "<cleaned transcript as plain text>" }\n- The results array MUST be the same length and order as the checklist items. Each element corresponds to the checklist item at the same index.\n- Use only these emojis: ✅ for satisfied (optimistic), ❌ for explicitly not satisfied, ❓ for unsure.\n- Be concise in the cleaned transcript (one paragraph), and prefer conservative paraphrasing.\n\nRules for marking ✅ (optimistic behavior):\n- If the transcript contains a direct mention (exact phrase or close paraphrase) of the checklist item, mark ✅.\n- If the transcript contains partial evidence (e.g., mentions related subcomponents like "routers", "firewalls" when the item mentions "network devices"), mark ✅.\n- If the transcript is ambiguous or off-topic, mark ❓. Only mark ❌ if the transcript clearly and explicitly contradicts or shows absence of the requirement.\n\nReturn only the JSON described above.`;
+      const resp = await fetch('/api/speech/recognize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      }).catch(err => {
+        console.error('Checklist validate fetch error', err);
+        return null as unknown as Response;
+      });
+
+      if (!resp) return;
+
+      if (!resp.ok) {
+        const errText = await resp.text().catch(() => '');
+        console.error('Checklist validation failed', resp.status, errText);
+        return;
+      }
+
+      const data = await resp.json().catch(() => null);
+      if (!data) {
+        console.warn('No data returned from validation endpoint');
+        return;
+      }
+
+      // Expect server to return results array aligned to checklistItems (same order)
+      const serverResults = Array.isArray(data.results) ? data.results : null;
+
+      setRoleChecklists(prev => {
+        const updated = { ...prev };
+        const target = updated[roleKey];
+        if (!target) return prev;
+        const now = new Date().toLocaleTimeString();
+
+        if (serverResults && Array.isArray(target) ? serverResults.length === target.length : serverResults.length === (target.items ? target.items.length : 0)) {
+          // Apply by index: set checkbox and set only an emoji into the placeholder; clear notes
+          for (let i = 0; i < serverResults.length; i++) {
+            const r = serverResults[i] || {};
+            const emoji = String(r.emoji || '❓').trim();
+            // set checked based on emoji
+            target.checked[i] = emoji === '✅';
+            // clear text notes (user can add their own) and set placeholder emoji only via rolePlaceholders
+            target.notes[i] = '';
+          }
+        } else {
+          // No aligned server results: don't change checkboxes, but optionally mark explicit misses
+          if (serverResults && serverResults.length > 0) {
+            console.warn('Server results length mismatch; results:', serverResults.length, 'items:', target.items.length);
+          } else {
+            console.warn('Server returned no results for checklist validation');
+          }
+          // Conservative: if you want to mark unaddressed items with ❌ in the textbox, uncomment below.
+          // target.items.forEach((it: string, i: number) => { target.notes[i] = `${it} ❌ (${now})`; });
+        }
+
+        updated[roleKey] = { ...target };
+        return updated;
+      });
+
+      // Update placeholders to be emoji-only based on server results
+      setRolePlaceholders(prev => {
+        const updated = { ...prev };
+        const targetPl = Array.isArray(updated[roleKey]) ? [...updated[roleKey]] : Array((serverResults && serverResults.length) || 0).fill('');
+        if (serverResults && serverResults.length > 0) {
+          for (let i = 0; i < serverResults.length; i++) {
+            const r = serverResults[i] || {};
+            const emoji = String(r.emoji || '❓').trim();
+            targetPl[i] = emoji || '';
+          }
+        }
+        updated[roleKey] = targetPl;
+        return updated;
+      });
+    } catch (e) {
+      console.error('validateChecklist error', e);
     }
   }
 
@@ -433,7 +527,7 @@ export default function AIChat() {
                         <span style={{ flex: 1 }}>{item}</span>
                         <input
                           type="text"
-                          placeholder="Paste transcript or notes..."
+                          placeholder={(rolePlaceholders[roles[activeRoleIdx]] && rolePlaceholders[roles[activeRoleIdx]][idx]) || 'Paste transcript or notes...'}
                           value={roleChecklists[roles[activeRoleIdx]].notes[idx]}
                           onChange={e => {
                             setRoleChecklists(prev => {
@@ -444,23 +538,12 @@ export default function AIChat() {
                           }}
                           style={{ marginLeft: 10, flex: 2, padding: '4px 8px', borderRadius: 4, border: '1px solid #ccc' }}
                         />
-                        <button
-                          style={{ marginLeft: 8, background: '#2563eb', color: '#fff', border: 'none', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', fontWeight: 600 }}
-                          onClick={() => {
-                            setRoleChecklists(prev => {
-                              const updated = { ...prev };
-                              if (updated[roles[activeRoleIdx]].notes[idx].trim()) {
-                                updated[roles[activeRoleIdx]].checked[idx] = true;
-                              }
-                              return { ...updated };
-                            });
-                          }}
-                        >Scan</button>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+                        {/* Scan button removed - server will evaluate transcript against checklist items */}
+                       </li>
+                     ))}
+                   </ul>
+                 )}
+               </div>
 
               {/* Right: live transcript pane */}
               <div style={{ width: 420, borderLeft: '1px solid #e6e6e6', paddingLeft: 18, display: 'flex', flexDirection: 'column' }}>
@@ -525,6 +608,18 @@ export default function AIChat() {
                         }
                         setRecording(false);
                         setInterimText('');
+
+                        // Assemble the full live transcript (final segments + any interim text)
+                        const full = [...finalSegments, interimText].filter(Boolean).join('\n');
+                        console.log('[Live Transcript on Stop]', full);
+
+                        // If we have a selected role, validate its checklist
+                        try {
+                          const roleName = roles && roles.length > 0 ? roles[activeRoleIdx] : Object.keys(roleChecklists)[0];
+                          if (roleName) validateChecklist(full, roleName);
+                        } catch (err) {
+                          console.error('Error calling validateChecklist', err);
+                        }
                       }}
                       style={{ background: '#374151', color: '#fff', border: 'none', padding: '8px 12px', borderRadius: 6, cursor: 'pointer', fontWeight: 700 }}
                     >Stop</button>
