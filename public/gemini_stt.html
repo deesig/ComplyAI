@@ -27,6 +27,15 @@
   <h3>Server final result</h3>
   <pre id="serverResult" style="background:#f7f7f7;padding:12px;border:1px solid #eee;min-height:80px;white-space:pre-wrap"></pre>
 
+  <h3>AI side comments (live)</h3>
+  <div id="aiComments" style="border:1px solid #eee;padding:12px;min-height:60px;background:#fff8e6;color:#333">
+    <div id="aiCommentsHeader" style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+      <strong style="font-size:14px">AI comments</strong>
+      <span id="aiLoading" style="display:none;color:#b36b00;font-size:13px">AI thinking...</span>
+    </div>
+    <ul id="aiHistory" style="list-style:none;padding:0;margin:0;max-height:220px;overflow:auto"></ul>
+  </div>
+
   <script src="/js/gemini_stt.js"></script>
 </body>
 </html>

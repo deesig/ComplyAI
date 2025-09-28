@@ -354,6 +354,10 @@
 @layer components;
 
 @layer utilities {
+  .collapse {
+    visibility: collapse;
+  }
+
   .static {
     position: static;
   }
@@ -390,6 +394,10 @@
     .container {
       max-width: 96rem;
     }
+  }
+
+  .inline {
+    display: inline;
   }
 
   .antialiased {
