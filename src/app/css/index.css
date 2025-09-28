@@ -1,5 +1,69 @@
 @import url('https://fonts.cdnfonts.com/css/bodoni'); /* Example URL, may vary */
 
+/* ProfilePage AI Chat button styles */
+.profile-ai-btn {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  font-size: 16px;
+  border: none;
+  border-radius: 7px;
+  padding: 11px 30px;
+  box-shadow: 0 2px 8px #2563eb22;
+  letter-spacing: 0.5px;
+  transition: background 0.18s, box-shadow 0.18s, opacity 0.18s;
+  cursor: pointer;
+  opacity: 1;
+}
+.profile-ai-btn:disabled {
+  background: #b3b3b3;
+  color: #fff;
+  box-shadow: none;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+.profile-ai-btn:not(:disabled):hover {
+  background: #1746a0;
+  color: #e0eaff;
+}
+/* WelcomePage button styles */
+.welcome-profile-btn {
+  background: #2563eb;
+  color: #fff;
+  font-weight: 700;
+  font-size: 18px;
+  border: none;
+  border-radius: 8px;
+  padding: 14px 38px;
+  margin-bottom: 6px;
+  box-shadow: 0 2px 8px #2563eb22;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: background 0.18s, color 0.18s;
+}
+.welcome-profile-btn:hover {
+  background: #1746a0;
+  color: #e0eaff;
+}
+.welcome-ai-btn {
+  background: #fff;
+  color: #2563eb;
+  font-weight: 700;
+  font-size: 17px;
+  border: 2px solid #2563eb;
+  border-radius: 8px;
+  padding: 12px 32px;
+  box-shadow: 0 2px 8px #2563eb11;
+  cursor: pointer;
+  letter-spacing: 0.5px;
+  transition: background 0.18s, color 0.18s, border-color 0.18s;
+}
+.welcome-ai-btn:hover {
+  background: #2563eb;
+  color: #fff;
+  border-color: #1746a0;
+}
+
     html, body {
       height: 100%;
       font-family: Arial, sans-serif;
